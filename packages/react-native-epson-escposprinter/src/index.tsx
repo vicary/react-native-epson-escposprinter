@@ -1,13 +1,53 @@
+import { EventEmitter } from "events";
 import { NativeModules, Platform } from "react-native";
-import { getPrintError } from "./errors";
+import {
+  getCallbackError,
+  getPrinterError,
+  type PrinterCallbackCode,
+} from "./errors";
 import type { Spec } from "./NativeEpsonEscposprinter";
+import type {
+  PrinterAlign,
+  PrinterBarcodeHri,
+  PrinterBarcodeType,
+  PrinterColor,
+  PrinterColorMode,
+  PrinterCompress,
+  PrinterCutType,
+  PrinterFeedPosition,
+  PrinterFirmwareInfomation,
+  PrinterFont,
+  PrinterHalftone,
+  PrinterInformation,
+  PrinterLanguage,
+  PrinterLayoutType,
+  PrinterLineStyle,
+  PrinterLocale,
+  PrinterMaintainenceCounterType,
+  PrinterPageDirection,
+  PrinterPulseDrawer,
+  PrinterPulseTime,
+  PrinterSeries,
+  PrinterSettings,
+  PrinterSettingType,
+  PrinterSettingValue,
+  PrinterSoundPattern,
+  PrinterStatus,
+  PrinterStatusChangeEvent,
+  PrinterSymbolLevelPdf,
+  PrinterSymbolLevelQrcode,
+  PrinterSymbolTypeAztecCode,
+  PrinterSymbolTypeOthers,
+  PrinterSymbolTypePdf,
+  PrinterSymbolTypeQrcode,
+} from "./PrinterConst";
 
 // @ts-expect-error ts(7017)
 const isTurboModuleEnabled = global.__turboModuleProxy != null;
 
 const NativeInterface: Spec = isTurboModuleEnabled
-  ? // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require("./NativeEpsonEscposprinter").default
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ? require("./NativeEpsonEscposprinter").default
   : NativeModules.EpsonEscposprinter;
 
 if (!NativeInterface) {
@@ -19,88 +59,122 @@ if (!NativeInterface) {
   );
 }
 
+const createSymbol = Symbol();
+
+const CODE_ERROR = "EpsonPrinterError";
+const CODE_CALLBACK = "EpsonPrinterCallback";
+
 const handleRejection = (error: unknown) => {
   if (error instanceof Error || (typeof error === "object" && error !== null)) {
+    const type = Reflect.get(error, "code");
     const code = Reflect.get(error, "message") | 0; // Cast to number
 
-    error = getPrintError(code) ?? error;
+    if (type === CODE_CALLBACK) {
+      error = getCallbackError(code) ?? error;
+    } else {
+      error = getPrinterError(code) ?? error;
+    }
   }
 
   throw error;
 };
 
-// [ ] Remove this after method implementations
-handleRejection;
-
 /**
- * This method is used to connect the printer. Please specify the type and
- * address of the printer connection.
+ * Starts communication with the printer.
  *
- * Bluetooth device address letters, please specify in uppercase.
- *
- * If the Bluetooth Device name is specified, the device that was paired is
- * detected automatically. If you omit the Device name, the supported model
- * device that was paired is detected automatically.
- *
- * If you want to use the Bluetooth device insecure communications provided
- * by the Android 2.3.3 or later, please specify the connection type
- * CMP_PORT_Bluetooth_Insecure.
- *
- * Connection port number is valid only for Wifi or USB, default values are:
- * 1. Android Wifi: 9100
- * 2. iOS Wifi: 9210
- * 3. iOS USB: 2
- *
- * Timeout is gives the maximum number of milliseconds to connect printer,
- * timeout is ignored for USB connections. Default values are:
- * 1. Wifi: 4000
- * 2. Bluetooth: 8000
- *
- * When connecting to the printer, this SDK also checks the status of the
- * printer and the supporting models.
- *
- * When communication with the printer is not necessary, must execute the
- * dissconnect method to disconnect the printer connection. When not disconnect,
- * the next connection will be an error.
- *
- * Note on Android:
- * When you first connect with USB, a dialog asking permission to access the USB
- * device on the Android terminal will be displayed, please tap the OK button.
-
+ * @returns A printer instance.
+ */
 export async function connect(
-  connectType: ESCPOSPrinterConnectType,
-  address = "",
-  port = 0,
-  timeout = 0,
-) {
-  address = address?.trim();
-
-  if (connectType === ESCPOSConst.CMP_PORT_USB) {
-    if (address) {
-      throw new Error(`USB connections by serial number is not supported.`);
-    }
-  } else {
-    if (!address) {
-      throw new Error(`Device address is required for non-USB connections.`);
-    }
-  }
-
+  series: PrinterSeries,
+  lang: PrinterLocale,
+  target: string,
+  timeout: number = 0,
+): Promise<Printer> {
   try {
     const printerId = await NativeInterface.connect(
-      connectType,
-      address,
-      port,
+      series,
+      lang,
+      target,
       timeout,
     );
 
-    return new EpsonEscposprinter(printerId);
+    return new Printer(createSymbol, printerId);
   } catch (error) {
     return handleRejection(error);
   }
 }
 
-class EpsonEscposprinter implements AsyncDisposable {
-  constructor(private readonly id: number) {}
+abstract class CommonPrinter extends EventEmitter<{
+  // [ ] Refactor native events into more javascript-like implementations.
+  // [ ] e.g. add a `status` property in the Printer class.
+  // [ ] e.g. separate each event code into individual events.
+  statusChange: [
+    status: PrinterStatusChangeEvent,
+  ];
+  // [ ] e.g. CODE_PRINTING -> printBegin
+  // [ ] e.g. CODE_SUCCESS  -> printComplete
+  // [ ] e.g. CODE_ERR_*    -> printError
+  printStatusChange: [
+    code: PrinterCallbackCode,
+    status: PrinterStatus,
+    printJobId?: string,
+  ];
+}> {
+  public static TRUE = 1;
+  public static FALSE = 0;
+  public static PARAM_UNSPECIFIED = -1;
+  public static PARAM_DEFAULT = -2;
+  public static UNKNOWN = -3;
+  // public static SWITCH_OFF = 0;
+  // public static SWITCH_ON = 1;
+  public static REMOVAL_WAIT_PAPER = 0;
+  public static REMOVAL_WAIT_NONE = 1;
+
+  public static EVENT_RECONNECTING = 0;
+  public static EVENT_RECONNECT = 1;
+  public static EVENT_DISCONNECT = 2;
+}
+
+export class Printer extends CommonPrinter implements AsyncDisposable {
+  public static WIFI_SIGNAL_NO = 0;
+  public static WIFI_SIGNAL_FAIL = 1;
+  public static WIFI_SIGNAL_GOOD = 2;
+  public static WIFI_SIGNAL_EXCELLENT = 3;
+
+  public static JSON_KEY_PRINTERSPEC_NAME = "PrinterSpec";
+  public static JSON_KEY_PRODUCT_NAME = "Product";
+  public static JSON_KEY_SERIALNO_NAME = "SerialNo";
+  public static JSON_KEY_MAINTENANCE_NAME = "Maintenance";
+  public static JSON_KEY_THERMALHEAD_NAME = "ThermalHead";
+  public static JSON_KEY_N_WARNINGDOT_NAME = "NumberOfWarningDot";
+  public static JSON_KEY_P_WARNINGDOT_NAME = "PositionOfWarningDot";
+  public static JSON_KEY_N_BROKENDOT_NAME = "NumberOfBrokenDot";
+  public static JSON_KEY_P_BROKENDOT_NAME = "PositionOfBrokenDot";
+  public static JSON_KEY_SETTING_NWDEVINFO_PASSWORDAUTH_KEY =
+    "Setting/NwDevInfo/PasswordAuth";
+  public static JSON_KEY_SETTING_NWDEVINFO_ADMINID_KEY =
+    "Setting/NwDevInfo/AdminId";
+  public static JSON_KEY_SETTING_NWCSAUTH_PASSWORD_KEY =
+    "Setting/NwCSAuth/Password";
+  public static JSON_KEY_SETTING_WIFICFG_WPAPSK_KEY =
+    "Setting/WifiCfg/WpaPsk/Key";
+
+  public static PREFIX_ENCRYPT = "U2FsdGVkX1";
+  public static FIRMWARE_MODE_NORMAL = 1;
+  public static FIRMWARE_MODE_MEMORY_REWRITE = 2;
+  public static HTTPS_TIMEOUT = 30000;
+
+  #id: number;
+
+  constructor(symbol: symbol, id: number) {
+    if (symbol !== createSymbol) {
+      throw new Error("Use `connect` to create a printer instance.");
+    }
+
+    super();
+
+    this.#id = id;
+  }
 
   /**
    * Supports `using` keyword via the Explicit Resource Management proposal.
@@ -114,353 +188,1162 @@ class EpsonEscposprinter implements AsyncDisposable {
    * ```
    *
    * @see https://github.com/tc39/proposal-explicit-resource-management
-
+   */
   async [Symbol.asyncDispose]() {
-    await this.disconnect();
+    return this.disconnect();
   }
 
   /**
-   * This method is used to disconnect the printer connection.
-   *
-   * When the end of the print or some kind of errors occurs, please disconnect
-   * the connection by the execution of this method.
-
+   * Ends communication with the printer.
+   */
   async disconnect() {
     try {
-      return await NativeInterface.disconnect(this.id);
+      return await NativeInterface.disconnect(this.#id);
     } catch (error) {
       return handleRejection(error);
     }
   }
 
   /**
-   * This method is used to set the encoding of the send data to the printer.
+   * Enables printer status event notification.
    *
-   * When you create an instance, it is initialized to the default character set
-   * of the OS.
-   *
-   * Please set the encoding by the setting of the memory switch of the printer.
-   * (Please refer to "1.4 Supported models (Printers)")
-   *
-   * This SDK supports printing UTF-8 encoded characters. Please refer to "2.5.2
-   * About printing UTF-8 encode characters" for the detail.
-
-  async setEncoding(encoding: string) {
+   * Acquires and updates the printer status at the `interval` specified with the
+   * interval property and notifies it of the listener method registered by
+   * `setStatusChangeEventListener`.
+   */
+  async startMonitor() {
     try {
-      return await NativeInterface.setEncoding(this.id, encoding);
+      return await NativeInterface.startMonitor(this.#id);
     } catch (error) {
       return handleRejection(error);
     }
   }
 
-  /**
-   * This method is used to send the command to get the status of the printer.
-   *
-   * If the result of this method is successful, you can get the status of the
-   * printer by status method.
-   *
-   * If the result of this method is failure, there is a possibility that the
-   * connection or the printer abnormality has occurred. In this case, please
-   * reconnect using the disconnect method and the connect method.
-   *
-   * If you want to print after the connected and some time passed, please
-   * check the status of the printer bythe execution of this method and the
-   * status method beforehand.
-   *
-   * In the case of network connection, it is automatically disconnected when
-   * passed a long time. If you want to keep a connection, please execute this
-   * method regularly.
-
-  async printerCheck() {
+  /** Disables status events. */
+  async stopMonitor() {
     try {
-      return await NativeInterface.printerCheck(this.id);
+      return await NativeInterface.stopMonitor(this.#id);
     } catch (error) {
       return handleRejection(error);
     }
   }
 
-  /**
-   * This method is used to get the status of the printer obtained by the
-   * printerCheck method.
-   *
-   * Before the execution of this method, you must run the printerCheck method.
-   *
-   * When there is not a parameter, return the logical sum of the status
-   * (CMP_STS_COVER_OPEN, CMP_STS_PAPER_EMPTY, CMP_STS_PRINTEROFF) indicating
-   * the error of the printer.
-   *
-   * When the status type is specified, return the status that matches. Status
-   * type can be specified in combination. If you want to combine, please specify
-   * the logical sum.
-
-  async status(
-    /** ESCPOSPrinterStatus
-    type = 0,
-  ) {
+  /** Acquires the current status information. */
+  async getStatus() {
     try {
-      if (Platform.OS === "ios") {
-        return await NativeInterface.status(this.id, 0);
-      } else {
-        return await NativeInterface.status(this.id, type);
-      }
+      const info = await NativeInterface.getStatus(this.#id);
+
+      return info as PrinterStatus;
     } catch (error) {
       return handleRejection(error);
     }
   }
 
   /**
-   * This method is used to print text which specifies alignment and attribute
-   * and size.
+   * Sends the print command.
    *
-   * Text attribute can be specified in combination font B, font C, bold, reverse,
-   * and underline. If you want to combine, please specify the logical sum.
+   * Make sure not to use this API repeatedly without getting the result in the
+   * callback.
    *
-   * Text size can be specified in combination with the width and height. If you
-   * want to combine, please specify the logical sum.
-
-  async printText(
-    data: string,
-    alignment: ESCPOSPrinterPrintAlignment = ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    /** @type import("./ESCPOSConst").ESCPOSPrinterTextAttribute
-    attribute: number = ESCPOSConst.CMP_FNT_DEFAULT,
-    /** @type import("./ESCPOSConst").ESCPOSPrinterTextSize
-    textSize: number = ESCPOSConst.CMP_TXT_1WIDTH | ESCPOSConst.CMP_TXT_1HEIGHT,
-  ) {
+   * This API sends data buffered by an add-type API (e.g., `addText`).
+   */
+  async sendData(timeout: number = 0) {
     try {
-      return await NativeInterface.printText(
-        this.id,
-        data,
-        alignment,
-        attribute,
-        textSize,
-      );
+      return await NativeInterface.sendData(this.#id, timeout);
     } catch (error) {
       return handleRejection(error);
     }
   }
 
   /**
-   * This method is used to print text with space padding which specifies
-   * attribute and size and length of the single-byte character equivalent and
-   * side where space is added.
+   * Starts a transaction.
    *
-   * Cannot use the combining characters in the text data.
+   * A transaction represents a single printing task such as printing a single
+   * sheet of receipt or coupon.
    *
-   * Text attribute can be specified in combination font B, font C, bold, reverse,
-   * and underline. If you want to combine, please specify the logical sum.
-   *
-   * Text size can be specified in combination with the width and height. If you
-   * want to combine, please specify the logical sum.
-
-  async printPaddingText(
-    data: string,
-    /** @type import("./ESCPOSConst").ESCPOSPrinterTextAttribute
-    attribute: number,
-    /** @type import("./ESCPOSConst").ESCPOSPrinterTextSize
-    textSize: number,
-    length: number,
-    side: ESCPOSPrinterSide,
-  ) {
+   * After this API is called, data until the transaction is terminated by
+   * `endTransaction` will be regarded as a single printing task.
+   */
+  async beginTransaction() {
     try {
-      return await NativeInterface.printPaddingText(
-        this.id,
-        data,
-        attribute,
-        textSize,
-        length,
-        side,
-      );
+      return await NativeInterface.beginTransaction(this.#id);
     } catch (error) {
       return handleRejection(error);
     }
   }
 
   /**
-   * This method is used to print text by using a font installed in the computer,
-   * which specifies alignment, font, size, style, and ratio.
+   * Ends a transaction.
    *
-   * What this method does internally is to generate a graphic image based on the
-   * given parameters, to print the graphic image.
+   * A transaction represents a single printing task such as printing a single
+   * sheet of receipt or coupon.
    *
-   * Font style can be specified in combination bold, reverse, underline, italic
-   * and strikeout. If you want to combine, please specify the logical sum.
-
-  async printTextLocalFont(
-    data: string,
-    alignment: ESCPOSPrinterPrintAlignment,
-    fontType: ESCPOSPrinterTypeface,
-    point: number,
-    /** @type import("./ESCPOSConst").ESCPOSPrinterFontStyle
-    style: number,
-    /** 1-1000
-    hRatio: number,
-    /** 1-1000
-    vRatio: number,
-  ) {
+   * After `beginTransaction` is called, data until the transaction is
+   * terminated by this API will be regarded as a single printing task.
+   */
+  async endTransaction() {
     try {
-      return await NativeInterface.printTextLocalFont(
-        this.id,
-        data,
-        alignment,
-        fontType,
-        point,
-        style,
-        hRatio,
-        vRatio,
-      );
+      return await NativeInterface.endTransaction(this.#id);
     } catch (error) {
       return handleRejection(error);
     }
   }
 
   /**
-   * This method is used to print bitmap which specifies base64 encoded bitmap
-   * data, along with width, alignment and mode.
-
-  async printBitmap(
-    /** base64 encoded bitmap data
-    data: string,
-    width: number = ESCPOSConst.CMP_BM_ASIS,
-    alignment: ESCPOSPrinterPrintAlignment = ESCPOSConst.CMP_ALIGNMENT_CENTER,
-    /** @type import("./ESCPOSConst").ESCPOSPrinterBitmapMode
-    mode: number = ESCPOSConst.CMP_BM_MODE_HT_THRESHOLD |
-      ESCPOSConst.CMP_BM_MODE_CMD_RASTER,
-  ) {
-    try {
-      return await NativeInterface.printBitmap(
-        this.id,
-        data,
-        width,
-        alignment,
-        mode,
-      );
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * **THIS METHOD IS NOT IMPLEMENTED**
+   * Acquires the print result for the specified print job ID.
    *
-   * This method is used to store bitmap which specifies number and file name and
-   * width and mode. The stored bitmap can print using printNVBitmap method or
-   * watermarkPrint method.
-   *
-   * The fileName parameter sets the full path of the bitmap file to store.
-   *
-   * The bitmap formats that can be stored are BMP / JPG / PNG / GIF.
-   *
-   * If the width parameter is omitted, it is in CMP_BM_ASIS to store.
-   *
-   * The mode parameter can be specified in combination with the halftone and
-   * store method. To use of the combination, please specify the logical sum.
-   * If the mode parameter is omitted, it is in `CMP_BM_MODE_HT_THRESHOLD` |
-   * `CMP_BM_MODE_CMD_MONO` to store.
-   *
-   * For more information on the mode parameter is as follows.
-
-  async setNVBitmap() {
-    // /** 1 - 20
-    // nvImageNumber: number,
-    // fileName: string,
-    // /**
-    //  * Bitmap width expressed. Expressed in the unit of measure given by MapMode
-    //  * (default dots).
-    //
-    // width: number = ESCPOSConst.CMP_BM_ASIS,
-    // /**
-    //  * **[CT-S281, PMU3300, CMP-20/30 Series]**
-    //  *
-    //  * It is necessary that the bitmap numbers are contiguous from number 1. If
-    //  * you register a new bitmap after the connection, the bitmap that was
-    //  * previously registered will be erased. The CMP-20/30 series, please register
-    //  * with a USB connection. The CMP-20 series is automatically disconnected
-    //  * because the printer is reset when the registration is completed.
-    //  *
-    //  * **[CT-D101/150/151, CT-E301/351/601/651, CT-S251/281II/310II/601/651/801/851/601II/651II/801II/851II/2000/4000 Series]**
-    //  *
-    //  * It is not necessary that the bitmap numbers are contiguous. And it is
-    //  * possible to remove a registered image by assigning the fileName parameter
-    //  * as an empty string.
-    //
-    // mode: ESCPOSPrinterNVImageMode = ESCPOSConst.CMP_BM_MODE_HT_THRESHOLD |
-    //   ESCPOSConst.CMP_BM_MODE_CMD_MONO,
-    throw new Error("Not implemented");
-  }
-
-  /**
-   * This method is used to print bitmap image (Logo) that is stored in the flash
-   * memory of the printer.
-   *
-   * To use this method, you need to register of the logo in advance. Logo
-   * registration, please store it using `setNVBitmap` method or use the
-   * "POS Printer utility" of utility software for the printer.
-   *
-   * Registration mode varies among the model of the printer. Please register as follows.
-   *
-   * **[CT-S281, PMU3300, CMP-20/30 Series]**
-   *
-   * Please register the logo with "Unused key code mode".
-   *
-   * To the image number to use, it is necessary to register the logo sequentially.
-   *
-   *
-   * **[CT-D101/150/151, CT-E301/351/601/651, CT-S251/281II/310II/601/651/801/851/601II/651II/801II/851II/751/2000/4000/4500 Series]**
-   *
-   * Please register the logo with "Key code mode".
-   *
-   * To the image number to use, it is necessary to register the logo that
-   * specifies the key code.
-
-  async printNVBitmap(
-    /** 1 - 20
-    nvImageNumber: number,
-  ) {
-    try {
-      return await NativeInterface.printNVBitmap(this.id, nvImageNumber);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to print one-dimensional barcode.
-   *
-   * GS1 DataBar (CMP_BCS_GS1DATABAR, CMP_BCS_GS1DATABAR_E, CMP_BCS_GS1DATABAR_T,
-   * CMP_BCS_GS1DATABAR_L) can use only the printers of CT-D101/150/151,
-   * CT-E301/351/601/651, CT-S251/310II/601/651/801/851/601II/651II/801II/851II/751/4500
-   * series.
-   *
-   * The designation of CMP_ALIGNMENT_CENTER and CMP_ALIGNMENT_RIGHT of the
-   * Barcode alignment on the page mode is ignored.
-
-  async printBarCode(
-    data: string,
-    symbology: ESCPOSPrinterBarcodeType,
+   * - The result of this API is notified to the listener method set by the
+   *   `setReceiveEventListener` API of the `Printer` class.
+   * - When multiple print processes were performed with the same print job ID,
+   *   the status of the latest print job is acquired.
+   */
+  async requestPrintJobStatus(
     /**
-     * 1 - 255 (dots)
+     * Specifies the print job ID.
      *
-     * Expressed in the unit of measure given by MapMode (default dots).
+     * Alphanumeric characters, underscore, hyphen, and period in 1 to 30 digits
+     * can be used.
+     */
+    printJobId: string,
+  ) {
+    try {
+      return await NativeInterface.requestPrintJobStatus(this.#id, printJobId);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
 
+  /**
+   * Clears the command buffer.
+   *
+   * The contents buffered in the command buffer are retained until this API is
+   * called.
+   */
+  async clearCommandBuffer() {
+    try {
+      return await NativeInterface.clearCommandBuffer(this.#id);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds text alignment setting to the command buffer.
+   *
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   * it will be ignored.
+   * - Setting of this API is also applied to the barcode/2D symbol/raster
+   * image/NV logo.
+   * - When specifying alignment in the page mode, use `addPagePosition` instead
+   * of this API.
+   */
+  async addTextAlign(align?: PrinterAlign) {
+    try {
+      return await NativeInterface.addTextAlign(
+        this.#id,
+        align ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds line spacing setting to the command buffer.
+   *
+   * - If the line spacing for a single line is set smaller than the print
+   * character size, paper may be fed for a larger quantity than the set amount
+   * to ensure proper printing.
+   */
+  async addLineSpace(
+    /** Specifies the line spacing (in dots). */
+    lineSpace: number,
+  ) {
+    try {
+      return await NativeInterface.addLineSpace(
+        this.#id,
+        Math.max(0, Math.min(255, lineSpace)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds text rotation setting to the command buffer.
+   *
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   * - Setting of this API is also applied to the barcode/2D symbol.
+   * - When specifying text rotation in the page mode, use addPageDirection
+   *   instead of this API.
+   */
+  async addTextRotate(
+    /** Specifies the text rotation. */
+    rotate?: boolean,
+  ) {
+    try {
+      return await NativeInterface.addTextRotate(
+        this.#id,
+        rotate ? Printer.TRUE : Printer.FALSE,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a character print command to the command buffer.
+   *
+   * - To print data other than text after printing text, feed a line or page.
+   *   A line which does not end with a line feed will be discarded as unfixed
+   *   data by the next `sendData`.
+   * - In the page mode, text is printed from the current print position with
+   *   the base line dot of the characters as the standard.
+   */
+  async addText(
+    /**
+     * Specifies the string to print.
+     *
+     * Use the following escape sequences for a horizontal tab and line feed.
+     *
+     * | String | Description         |
+     * | ------ | :------------------ |
+     * | \t     | Horizontal tab (HT) |
+     * | \h     | Line feed (LF)      |
+     * | \\     | Backslash           |
+     */
+    data: string,
+  ) {
+    try {
+      return await NativeInterface.addText(this.#id, data);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds language setting to the command buffer.
+   *
+   * A text string specified by the addText API is encoded according to the
+   * language specified by this API.
+   *
+   * - This API is called before the `addText` API.
+   * - Use this API at the top of each print job.
+   * - Available languages differ depending on character specifications of the
+   *   printer. For details, see Technical Reference Guide of the printer.
+   */
+  async addTextLang(
+    /** Specifies the language. */
+    lang?: PrinterLanguage,
+  ) {
+    try {
+      return await NativeInterface.addTextLang(
+        this.#id,
+        lang ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds character font setting to the command buffer.
+   */
+  async addTextFont(
+    /** Specifies the font. */
+    font?: PrinterFont,
+  ) {
+    try {
+      return await NativeInterface.addTextFont(
+        this.#id,
+        font ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds smoothing setting to the command buffer.
+   */
+  async addTextSmooth(smooth?: boolean) {
+    try {
+      return await NativeInterface.addTextSmooth(
+        this.#id,
+        smooth ? Printer.TRUE : Printer.FALSE,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds character scaling factor setting to the command buffer.
+   *
+   * - If all the parameters are set to "Printer.PARAM_UNSPECIFIED,"
+   *   ERR_PARAM will be returned.
+   * - For slip, endorsement, or validation printing, an integer from 1 to 2
+   *   can be set for the width and height.
+   */
+  async addTextSize(
+    /** Specifies the width scaling factor. */
+    width: number,
+    /** Specifies the height scaling factor. */
+    height: number,
+  ) {
+    try {
+      return await NativeInterface.addTextSize(
+        this.#id,
+        Math.max(1, Math.min(8, width)),
+        Math.max(1, Math.min(8, height)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds character style setting to the command buffer.
+   *
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   */
+  async addTextStyle(
+    /** Specifies the reverse print. */
+    reverse?: boolean,
+    /** Specifies the underline. */
+    ul?: boolean,
+    /** Specifies the emphasized print. */
+    em?: boolean,
+    /** Specifies the color. */
+    color?: PrinterColor,
+  ) {
+    try {
+      return await NativeInterface.addTextStyle(
+        this.#id,
+        reverse ? Printer.TRUE : Printer.FALSE,
+        ul ? Printer.TRUE : Printer.FALSE,
+        em ? Printer.TRUE : Printer.FALSE,
+        color ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds horizontal character print start position to the command buffer.
+   *
+   * - Calling this API causes the printer positioned at "other than the
+   *   beginning of the line." This is also true even if 0 is set to "X."
+   * - After executing this API, addTextAlign and addTextRotate cannot be used.
+   * - Setting of this API is also applied to the barcode/2D symbol/raster
+   *   image/NV logo.
+   * - The setting of this API is applied to each line (Or to each barcode,
+   *   2D symbol, raster image, or NV logo). If you want to apply the setting to
+   *   multiple lines, set this API to each of the lines.
+   */
+  async addHPosition(
+    /** Specifies the horizontal position (in dots). */
+    x: number,
+  ) {
+    try {
+      return await NativeInterface.addHPosition(
+        this.#id,
+        Math.max(0, Math.min(65535, x)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a paper-feed-by-dot command to the command buffer.
+   *
+   * - Calling this API causes the printer positioned at "the beginning of the
+   *   line."
+   */
+  async addFeedUnit(
+    /** Specifies the feed amount (in dots). */
+    unit: number,
+  ) {
+    try {
+      return await NativeInterface.addFeedUnit(
+        this.#id,
+        Math.max(0, Math.min(255, unit)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a paper-feed-by-line command to the command buffer.
+   *
+   * - Calling this API causes the printer positioned at "the beginning of the
+   *   line."
+   */
+  async addFeedLine(
+    /** Specifies the feed amount (in lines). */
+    line: number,
+  ) {
+    try {
+      return await NativeInterface.addFeedLine(
+        this.#id,
+        Math.max(0, Math.min(255, line)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a raster image print command to the command buffer.
+   *
+   * Prints Android.graphics.Bitmap class graphics.
+   *
+   * A specified area of Android.graphics.Bitmap class graphics is binarized
+   * according to the mode, halftone, and brightness parameters and converted
+   * into a raster image.
+   *
+   * The converted image is compressed or not compressed before transmission
+   * according to the compress parameter value.
+   *
+   * One pixel of an image corresponds to one dot of the printer. When a
+   * transparent color is contained in the image, the background of the image is
+   * assumed to be white.
+   *
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   * - If the area specified by x/y and width/height parameters does not fit
+   *   within the image size specified by data parameter, ERR_PARAM will be
+   *   returned as an exception.
+   * - The "compress" parameter is effective when the printer is connected via
+   *   Bluetooth. For other printers, specify Printer.COMPRESS_AUTO.
+   * - Printing may get slower if a transparent image is printed.
+   * - The multi-gradation and the compression of image data are not supported
+   *   in the page mode. If you set those in the page mode, nothing will be
+   *   printed.
+   * - Set an image size appropriate for the printer. If you set to print a
+   *   large image, the API commands will be succeeded, but the printer may
+   *   print nothing.
+   * - Even if the size of an image is printable, the ERR_MEMORY error may occur
+   *   depending on the Android device specification. In such case, reduce the
+   *   image size.
+   * - This API consumes a lot of the buffer provided in the printer. When using
+   *   this API for LFCPrinter class, be sure to check the buffer size of the
+   *   printer.
+   */
+  async addImage(
+    /** Bitmap data in base64 format. */
+    data: string,
+    /** Specifies the horizontal start position of the print area (in pixels). */
+    x: number,
+    /** Specifies the vertical start position of the print area (in pixels). */
+    y: number,
+    /** Specifies the width (in dots). */
+    width: number,
+    /** Specifies the height (in dots). */
+    height: number,
+    /** Specifies the color. */
+    color?: PrinterColor,
+    /** Specifies the mode. */
+    mode?: PrinterColorMode,
+    /**
+     * Specifies the halftone.
+     *
+     * Effective for the monochrome (2 scales) color mode only.
+     */
+    halftone?: PrinterHalftone,
+    /**
+     * Specifies the brightness.
+     *
+     * When a value other than 1.0 is specified for the brightness compensation
+     * value, processing gets slower.
+     */
+    brightness?: number,
+    /** Specifies the compress. */
+    compress?: PrinterCompress,
+  ) {
+    try {
+      return await NativeInterface.addImage(
+        this.#id,
+        data,
+        Math.max(0, Math.min(65534, x)),
+        Math.max(0, Math.min(65534, y)),
+        Math.max(1, Math.min(65535, width)),
+        Math.max(1, Math.min(65535, height)),
+        color ?? Printer.PARAM_DEFAULT,
+        mode ?? Printer.PARAM_DEFAULT,
+        halftone ?? Printer.PARAM_DEFAULT,
+        brightness
+          ? Math.max(0, Math.min(10, brightness))
+          : Printer.PARAM_DEFAULT,
+        compress ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a NV logo print command to the command buffer.
+   *
+   * Prints the logo registered in the NV memory of the printer.
+   *
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   * - For how to register the NV logo, refer to the Technical Reference Guide
+   *   of the printer.
+   * - The page mode does not support multi-gradation printing. Multi-gradation
+   *   graphics can be printed in the standard mode only.
+   * - The NV logo specified by this API is printed with the color setting
+   *   specified by addTextStyle buffered in advance.
+   * - TM-U220 and TM-U220II, TM-U330 use only the key1 parameter, however, you
+   *   need to set "Printer.PARAM_DEFAULT" as the key2 parameter for those
+   *   printers since an empty key2 parameter causes an error.
+   */
+  async addLogo(
+    /** Specifies the key code 1 of the NV logo. */
+    key1: number,
+    /** Specifies the key code 2 of the NV logo. */
+    key2?: number,
+  ) {
+    try {
+      return await NativeInterface.addLogo(
+        this.#id,
+        key1,
+        key2 ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a barcode print command to the command buffer.
+   *
+   * - Use this API at the "beginning of a line."
+   * - When the barcode data specified in data does not conform to the barcode
+   *   type specified in type, an error will not be returned as an exception and
+   *   the barcode will not be printed.
+   * - The "CODE 128 auto" type of barcode can be specified when the printer is
+   *   TM-m30II, TM-m30II-H, TM-m30II-NT, TMm30II-S, TM-m30II-SL, TM-m30III,
+   *   TM-m30III-H, TM-m50, TM-m50II, TM-m50II-H, TM-T88VII, TM-L100, TM-P20II
+   *   or TM-P80II.
+   */
+  async addBarcode(
+    /**
+     * Specifies barcode data as a text string.
+     *
+     * When specifying binary data which cannot be represented as a string, use
+     * the following escape sequences.
+     *
+     * | String | Description                |
+     * | ------ | :------------------------- |
+     * | \xnn   | Hexadecimal control code   |
+     * | \\     | Backslash                  |
+     */
+    data: string,
+    /** Specifies the barcode type. */
+    type: PrinterBarcodeType,
+    /** Specifies the HRI (Human Readable Interpretation) setting. */
+    hri: PrinterBarcodeHri,
+    /** Specify the font */
+    font: PrinterFont,
+    /** Specifies the barcode width (in dots). */
+    width: number,
+    /** Specifies the barcode height (in dots). */
+    height: number,
+  ) {
+    try {
+      return await NativeInterface.addBarcode(
+        this.#id,
+        data,
+        type,
+        hri,
+        font,
+        Math.max(2, Math.min(6, width)),
+        Math.max(1, Math.min(255, height)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a 2D symbol print command to the command buffer.
+   *
+   * - Use this API at the "beginning of a line."
+   * - When the 2D symbol data specified in data does not conform to the 2D
+   *   symbol type specified in type, an error will not be returned as an
+   *   exception and the 2D symbol will not be printed.
+   * - During ESC/POS control, specifying values outside the valid ranges for
+   *   the width and height parameters results in default value printing.
+   * - During ePOS-Device XML control, specifying values outside the valid
+   *   ranges for the width and height parameters causes `sendData` to generate
+   *   an exception with ERR_FAILURE.
+   */
+  async addSymbol(
+    /** Specifies the symbol data as a text string. */
+    data: string,
+    type: PrinterSymbolTypePdf,
+    level: PrinterSymbolLevelPdf,
+    width: number,
+    height: number,
+    size: number,
+  ): Promise<void>;
+  async addSymbol(
+    data: string,
+    type: PrinterSymbolTypeQrcode,
+    level: PrinterSymbolLevelQrcode,
+    width: number,
+    height: number,
+    size: number,
+  ): Promise<void>;
+  async addSymbol(
+    data: string,
+    type: PrinterSymbolTypeAztecCode,
+    level: number,
+    width: number,
+    height: number,
+    size: number,
+  ): Promise<void>;
+  async addSymbol(
+    data: string,
+    type: PrinterSymbolTypeOthers,
+    level: number, // PARAM_DEFAULT
+    width: number,
+    height: number,
+    size: number,
+  ): Promise<void>;
+  async addSymbol(
+    data: string,
+    type:
+      | PrinterSymbolTypePdf
+      | PrinterSymbolTypeQrcode
+      | PrinterSymbolTypeAztecCode
+      | PrinterSymbolTypeOthers,
+    level: number,
+    width: number,
+    height: number,
+    size: number,
+  ) {
+    try {
+      return await NativeInterface.addSymbol(
+        this.#id,
+        data,
+        type,
+        level,
+        Math.max(2, Math.min(16, width)),
+        Math.max(2, Math.min(8, height)),
+        Math.max(0, Math.min(65535, size)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a horizontal ruled line print command to the command buffer.
+   *
+   * Draws a horizontal ruled line.
+   *
+   * - This API cannot be used in the page mode.
+   * - Use addPageLine to draw a horizontal ruled line in the page mode.
+   */
+  async addHLine(
+    x1: number,
+    x2: number,
+    lineStyle?: PrinterLineStyle,
+  ) {
+    try {
+      return await NativeInterface.addHLine(
+        this.#id,
+        Math.max(0, Math.min(65535, x1)),
+        Math.max(0, Math.min(65535, x2)),
+        lineStyle ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a command to start drawing a vertical ruled line to the command
+   * buffer.
+   *
+   * Starts drawing a vertical line.
+   *
+   * - This API cannot be used in the page mode.
+   * - Use addPageLine to draw a vertical ruled line in the page mode.
+   * - Drawing of the vertical ruled line continues until stopped by the
+   *   `addVLineEnd` API.
+   * - Use this API with the `addVLineEnd` API.
+   */
+  async addVLineBegin(
+    /** Start position to draw a vertical ruled line (in dots) */
+    x: number,
+    lineStyle?: PrinterLineStyle,
+  ) {
+    try {
+      return await NativeInterface.addVLineBegin(
+        this.#id,
+        Math.max(0, Math.min(65535, x)),
+        lineStyle ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a command to stop drawing a vertical ruled line to the command buffer.
+   *
+   * Ends drawing a vertical line.
+   *
+   * - This API cannot be used in the page mode.
+   * - Use addPageLine to draw a vertical ruled line in the page mode.
+   * - This API draws a vertical ruled line until stopped by `addVLineEnd`.
+   * - Use this API with the `addVLineBegin` API.
+   */
+  async addVLineEnd(lineId: number) {
+    try {
+      return await NativeInterface.addVLineEnd(this.#id, lineId);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a page mode start command to the command buffer.
+   *
+   * Starts processing in the page mode.
+   *
+   * - The page mode does not support multi-gradation printing.
+   * - Use this API with the `addPageEnd` API.
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   */
+  async addPageBegin() {
+    try {
+      return await NativeInterface.addPageBegin(this.#id);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a page mode end command to the command buffer.
+   *
+   * Ends processing in the page mode.
+   *
+   * - The page mode does not support multi-gradation printing.
+   * - Use this API with the `addPageBegin` API.
+   */
+  async addPageEnd() {
+    try {
+      return await NativeInterface.addPageEnd(this.#id);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds page mode print area setting to the command buffer.
+   *
+   * Specifies the page mode print area (coordinates). Following this API, call
+   * an API to specify print data such as the `addText` API.
+   *
+   * - Define the print area in accordance with the contents to print. If the
+   *   print data does not fit within the print area, the printed contents will
+   *   be truncated.
+   * - Use this API between the `addPageBegin` and `addPageEnd` APIs.
+   * - Specify the width and height of the print area in accordance with the
+   *   print direction setting. Otherwise the print data may be truncated. Set
+   *   the print direction by `addPageDirection`.
+   * - This API does not work in the standard mode.
+   */
+  async addPageArea(
+    /** Specifies the horizontal start position of the print area (in dots). */
+    x: number,
+    /** Specifies the vertical start position of the print area (in dots). */
+    y: number,
+    /** Specifies the width of a print area (in dots). */
+    width: number,
+    /** Specifies the height of a print area (in dots). */
+    height: number,
+  ) {
+    try {
+      return await NativeInterface.addPageArea(
+        this.#id,
+        Math.max(0, Math.min(65535, x)),
+        Math.max(0, Math.min(65535, y)),
+        Math.max(1, Math.min(65535, width)),
+        Math.max(1, Math.min(65535, height)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds page mode print direction setting to the command buffer.
+   *
+   * Specifies the print direction in the page mode.
+   *
+   * - This API does not work in the standard mode.
+   * - Use this API between the `addPageBegin` and `addPageEnd` APIs.
+   */
+  async addPageDirection(
+    /** Specifies the print direction. */
+    direction?: PrinterPageDirection,
+  ) {
+    try {
+      return await NativeInterface.addPageDirection(
+        this.#id,
+        direction ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds print position setting within the print area in the page mode to the
+   * command buffer.
+   *
+   * Specifies the print start position (coordinates) within the area specified
+   * by the `addPageArea` API.
+   *
+   * - This API does not work in the standard mode.
+   * - Use this API between the `addPageBegin` and `addPageEnd` APIs.
+   * - Specify the print start position (coordinates) in accordance with the
+   *   contents to print.
+   */
+  async addPagePosition(
+    /** Specifies the horizontal start position of the print area (in dots). */
+    x: number,
+    /** Specifies the vertical start position of the print area (in dots). */
+    y: number,
+  ) {
+    try {
+      return await NativeInterface.addPagePosition(
+        this.#id,
+        Math.max(0, Math.min(65535, x)),
+        Math.max(0, Math.min(65535, y)),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a page mode line draw command to the command buffer.
+   *
+   * Draws a line in the page mode.
+   *
+   * - This API does not work in the standard mode.
+   * - A diagonal line cannot be drawn.
+   * - Use this API between the `addPageBegin` and `addPageEnd` APIs.
+   */
+  async addPageLine(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    style?: PrinterLineStyle,
+  ) {
+    try {
+      return await NativeInterface.addPageLine(
+        this.#id,
+        Math.max(0, Math.min(65535, x1)),
+        Math.max(0, Math.min(65535, y1)),
+        Math.max(0, Math.min(65535, x2)),
+        Math.max(0, Math.min(65535, y2)),
+        style ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a page mode rectangle draw command to the command buffer.
+   *
+   * Draws a rectangle in the page mode.
+   *
+   * - This API does not work in the standard mode.
+   * - Use this API between the `addPageBegin` and `addPageEnd` APIs.
+   */
+  async addPageRectangle(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    style?: PrinterLineStyle,
+  ) {
+    try {
+      return await NativeInterface.addPageRectangle(
+        this.#id,
+        Math.max(0, Math.min(65535, x1)),
+        Math.max(0, Math.min(65535, y1)),
+        Math.max(0, Math.min(65535, x2)),
+        Math.max(0, Math.min(65535, y2)),
+        style ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds the start batch rotate print mode to the command buffer.
+   *
+   * - This API does not work in the page mode.
+   * - Use the add APIs for batch rotate printing (Example: `addText`) by
+   *   enclosing between this API and the `addRotateEnd` API.
+   * - Do not use the following APIs between this API and the `addRotateEnd` API.
+   *   - `endTransaction`
+   *   - `addPageBegin`
+   *   - `addPageEnd`
+   *   - `addCut`
+   *   - `addPulse`
+   *   - `addSound`
+   *   - `setPrinterSetting`
+   *   - `ejectPaper`
+   * - The data volume that the printer can process in a single batch rotate
+   *   printing is as described below.
+   *   - Strings: 80 lines
+   *   - Graphics: 2400 dots
+   * - When you are using the add APIs (Example: `addText`) in the batch rotate
+   *   print mode, you must take care while using certain APIs.
+   *   - `addTextSize`
+   *     - If the longitudinal direction is set to triple angle or higher with
+   *       `addTextSize` before this API, then this API and the succeeding APIs
+   *       will become double-angled.
+   *     - If the longitudinal direction is set to triple angle or higher with
+   *       `addTextSize` after this API, then the specification in the
+   *       longitudinal direction will be ignored and become single-angled.
+   *   - `addFeedUnit`
+   *     - The number of paper feed lines varies depending on the line spacing
+   *       specified in `addLineSpace`. If the line spacing is specified as 30
+   *       in `addLineSpace`, paper feeding can be performed for 8 lines with
+   *       the maximum value of `addFeedUnit` as 255.
+   *   - `addImage`
+   *     - If the total vertical size of print data exceeds 2400 dots, printing
+   *       may not be performed as intended. For example, if 500-dot data B is
+   *       sent to a location in the printer buffer where 2000-dot data A is
+   *       accumulated, then data B will be accumulated in the printer buffer
+   *       after data A has been printed.
+   *     - The multi-gradation (16 scales) maximum size is up to 600 dots
+   *       vertically. In the case of multi-gradation (16 scales), a data volume
+   *       that is four times that of monochrome (2 scales) is required.
+   *     - If the vertical size of one image element exceeds the data volume
+   *       that can be processed in one go, printing will not be performed.
+   *       - Monochrome (2 scales) maximum value: 2400 dots
+   *       - Multi-gradation (16 scales) maximum value: 600 dots
+   */
+  async addRotateBegin() {
+    try {
+      return await NativeInterface.addRotateBegin(this.#id);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds the end batch rotate print mode to the command buffer.
+   *
+   * - This API does not work in the page mode.
+   * - Use the add APIs for batch rotate printing (Example: addText) by
+   *   enclosing between this API and the `addRotateBegin` API.
+   */
+  async addRotateEnd() {
+    try {
+      return await NativeInterface.addRotateEnd(this.#id);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a sheet cut command to the command buffer.
+   *
+   * Sets how to cut paper.
+   *
+   * - This API cannot be used in the page mode.
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   * - If print data is not specified after the cut reservation
+   *   (Printer.CUT_RESERVE), the printer will execute the cut after feeding
+   *   paper up to the position of the reserved cut.
+   * - Depending on the printer, it may wait approximately 2 seconds for the
+   *   print data after the cut reservation (Printer.CUT_RESERVE) before
+   *   starting the paper feed operation.
+   * - When using the cut reservation (Printer.CUT_RESERVE), set the length of
+   *   one receipt to at least 20 mm.
+   */
+  async addCut(
+    /** Specifies the cut type. */
+    type?: PrinterCutType,
+  ) {
+    try {
+      return await NativeInterface.addCut(
+        this.#id,
+        type ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a drawer kick command to the command buffer.
+   *
+   * Sets the drawer kick.
+   *
+   * - This API cannot be used in the page mode.
+   * - The drawer and optional external buzzer cannot be connected
+   *   simultaneously.
+   * - Do not open the drawer repeatedly for a short time. The drawer may be
+   *   damaged due to too much load.
+   * - For built-in buzzer equipped models of the following printers, sounding
+   *   the buzzer is possible using the pulse output commands for drawer kick
+   *   connectors. For details on controlling the built-in buzzer, refer to the
+   *   Technical Reference Guide of the printer. TM-T70 / TM-T70II / TM-T82II /
+   *   TM-T82III / TM-T83II / TM-T88IV / TM-T88V / TM-T88VI / TM-T88VII /
+   *   TM-T82II-i / TM-T83II-i / TM-T88VI-iHUB / TM-L90 / TM-L100
+   */
+  async addPulse(
+    /** Specifies the drawer kick connector number. */
+    drawer?: PrinterPulseDrawer,
+    /** Specifies the on time (in milliseconds). */
+    time?: PrinterPulseTime,
+  ) {
+    try {
+      return await NativeInterface.addPulse(
+        this.#id,
+        drawer ?? Printer.PARAM_DEFAULT,
+        time ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds buzzer sound setting to the command buffer.
+   *
+   * Sets the buzzer.
+   *
+   * - This API cannot be used in the page mode.
+   * - The drawer and optional external buzzer cannot be connected simultaneously.
+   * - This API cannot be used if the printer is not equipped with a buzzer.
+   * - The timing to receive the callback of sendData API varies by printer.
+   *   - Mobile models: after the `sendData` API is executed.
+   *   - Other than Mobile models: after the buzzer sounding is finished.
+   * - For built-in buzzer equipped models of the following printers, sounding
+   *   the buzzer is possible using `addPulse`.
+   *   TM-T70 / TM-T70II / TM-T82II / TM-T82III / TM-T83II / TM-T88IV / TM-T88V
+   *   / TM-T88VI / TM-T88VII / TM-T82II-i / TM-T83II-i / TM-T88VI-iHUB / TM-L90
+   *   / TM-L100
+   */
+  async addSound(
+    /** Specifies the sound pattern. */
+    pattern?: PrinterSoundPattern,
+    /** Specifies the repeat count. 0 = Unlimited */
+    repeat?: number,
+    /** Effective for Patterns 1 to 10 only. */
+    cycle?: number,
+  ) {
+    try {
+      return await NativeInterface.addSound(
+        this.#id,
+        pattern ?? Printer.PARAM_DEFAULT,
+        repeat ? Math.max(0, Math.min(255, repeat)) : Printer.PARAM_DEFAULT,
+        cycle ? Math.max(1000, Math.min(25500, cycle)) : Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds a label sheet/black mark sheet feed command to the command buffer.
+   *
+   * - The label sheet/black mark sheet can be controlled in the standard mode.
+   * - This API cannot be used in the page mode.
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   */
+  async addFeedPosition(position: PrinterFeedPosition) {
+    try {
+      return await NativeInterface.addFeedPosition(
+        this.#id,
+        position,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Adds layout setting of the label sheet/black mark sheet to the command
+   * buffer.
+   *
+   * - This API does not work in the page mode.
+   * - Use this API at the "beginning of a line." If this API is used elsewhere,
+   *   it will be ignored.
+   * - Available setting values vary by TM printer model. For more details, see
+   *   the FS (L<Function 33> command.
+   *   https://support.epson.net/publist/reference_en/
+   * - The available parameter values for each type of paper are listed below.
+   *   The following table shows available values for TM printer models, and
+   *   shows those for POS terminal models in parentheses.
+   */
+  async addLayout(
+    /** Specifies the paper type. */
+    type: PrinterLayoutType,
+    /** Specifies the paper width (in 0.1 mm units). */
+    width: number,
+    /**
+     * Specifies the distance from the print reference mark to the next print
+     * reference mark (in 0.1mm units).
+     */
     height: number,
     /**
-     * 2 - 6 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    width: number,
-    alignment: ESCPOSPrinterPrintAlignment,
-    textPosition: ESCPOSPrinterTextPosition,
+     * Specifies the distance from the print reference mark to the top of the
+     * sheet (in 0.1mm units).
+     */
+    marginTop: number,
+    /**
+     * Specifies the distance from the eject reference mark to the bottom edge
+     * of the printable area (in 0.1mm units).
+     */
+    marginBottom: number,
+    /**
+     * Specifies the distance from the eject reference mark to the cut position
+     * (in 0.1mm units).
+     */
+    offsetCut: number,
+    /**
+     * Specifies the distance from the eject reference mark to the bottom edge
+     * of the label (in 0.1mm units).
+     */
+    offsetLabel: number,
   ) {
     try {
-      return await NativeInterface.printBarCode(
-        this.id,
-        data,
-        symbology,
-        height,
-        width,
-        alignment,
-        textPosition,
+      return await NativeInterface.addLayout(
+        this.#id,
+        type,
+        Math.max(1, Math.min(10000, width)),
+        Math.max(0, Math.min(10000, height)),
+        Math.max(-9999, Math.min(10000, marginTop)),
+        Math.max(-9999, Math.min(10000, marginBottom)),
+        Math.max(-9999, Math.min(10000, offsetCut)),
+        Math.max(0, Math.min(10000, offsetLabel)),
       );
     } catch (error) {
       return handleRejection(error);
@@ -468,41 +1351,41 @@ class EpsonEscposprinter implements AsyncDisposable {
   }
 
   /**
-   * This method is used to print PDF-417 barcode.
+   * Adds a command to the command buffer.
    *
-   * Please refer to the Command Reference of the printer for details on each
-   * parameter.
+   * Sends the ESC/POS command.
    *
-   * The designation of CMP_ALIGNMENT_CENTER and CMP_ALIGNMENT_RIGHT of the
-   * Barcode alignment on the page mode is ignored.
+   * - Refer to the following URL for details of the ESC/POS command.
+   *   https://support.epson.net/publist/reference_en/
+   *
+   * - Epson ePOS SDK does not check the commands sent using this API.
+   *
+   *   If the commands interfere with Epson ePOS SDK operations, other APIs may
+   *   work wrongly or status values may become invalid.
+   *
+   *   This API should be used with a full understanding of ESC/POS commands and
+   *   the receipt printer specifications.
+   */
+  async addCommand(data: string) {
+    try {
+      return await NativeInterface.addCommand(this.#id, data);
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
 
-  async printPDF417(
-    data: string,
-    /** 1 - 30, 0 = automatic
-    digits: number,
-    /** 3 - 90, 0 = automatic
-    steps: number,
-    /**
-     * 2 - 8 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    moduleWidth: number,
-    /** 2 - 8
-    stepHeight: number,
-    ECLevel: ESCPOSPrinterPDF417ECLevel,
-    alignment: ESCPOSPrinterPrintAlignment,
+  /**
+   * Acquires the value of the printer's maintenance counter.
+   */
+  async getMaintenanceCounter(
+    type: PrinterMaintainenceCounterType,
+    timeout?: number,
   ) {
     try {
-      return await NativeInterface.printPDF417(
-        this.id,
-        data,
-        digits,
-        steps,
-        moduleWidth,
-        stepHeight,
-        ECLevel,
-        alignment,
+      return await NativeInterface.getMaintenanceCounter(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+        type,
       );
     } catch (error) {
       return handleRejection(error);
@@ -510,32 +1393,20 @@ class EpsonEscposprinter implements AsyncDisposable {
   }
 
   /**
-   * This method is used to print QRCode barcode.
+   * Resets the value of the printer's maintenance counter.
    *
-   * Please refer to the Command Reference of the printer for details on each
-   * parameter.
-   *
-   * The designation of CMP_ALIGNMENT_CENTER and CMP_ALIGNMENT_RIGHT of the
-   * Barcode alignment on the page mode is ignored.
-
-  async printQRCode(
-    data: string,
-    /**
-     * 1 - 16 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    moduleSize: number,
-    ECLevel: ESCPOSPrinterQRCodeECLevel,
-    alignment: ESCPOSPrinterPrintAlignment = ESCPOSConst.CMP_ALIGNMENT_CENTER,
+   * The value acquired by this API is notified to the listener method specified
+   * in the listener parameter.
+   */
+  async resetMaintenanceCounter(
+    type: PrinterMaintainenceCounterType,
+    timeout?: number,
   ) {
     try {
-      return await NativeInterface.printQRCode(
-        this.id,
-        data,
-        moduleSize,
-        ECLevel,
-        alignment,
+      return await NativeInterface.resetMaintenanceCounter(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+        type,
       );
     } catch (error) {
       return handleRejection(error);
@@ -543,304 +1414,45 @@ class EpsonEscposprinter implements AsyncDisposable {
   }
 
   /**
-   * This method is used to print 2-dimensional GS1 DataBar barcode.
+   * Acquires the set value of the printer setting.
    *
-   * This method can use only the printers of CT-D101/150/151, CT-E301/351/601/651,
-   * CT-S251/310II/601/651/801/851/601II/651II/801II/851II/751/4500 series.
-   *
-   * Please refer to the Command Reference of the printer for details on each
-   * parameter.
-   *
-   * The designation of CMP_ALIGNMENT_CENTER and CMP_ALIGNMENT_RIGHT of the
-   * Barcode alignment on the page mode is ignored.
-
-  async printGS1DataBarStacked(
-    data: string,
-    symbology: ESCPOSPrinterGS1DatabarType,
-    /**
-     * 2 - 8 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    moduleSize: number,
-    /**
-     * 106 - 39528 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    maxSize: number,
-    alignment: ESCPOSPrinterPrintAlignment,
+   * The value acquired by this API is notified to the listener method specified
+   * in the listener parameter.
+   */
+  async getPrinterSetting(
+    type: PrinterSettingType,
+    timeout?: number,
   ) {
     try {
-      return await NativeInterface.printGS1DataBarStacked(
-        this.id,
-        data,
-        symbology,
-        moduleSize,
-        maxSize,
-        alignment,
+      const ret = await NativeInterface.getPrinterSetting(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+        type,
       );
+
+      return ret as PrinterSettingValue;
     } catch (error) {
       return handleRejection(error);
     }
   }
 
-  /** This method is used to cut the paper.
-  async cutPaper(type: ESCPOSPrinterCutType) {
-    try {
-      return await NativeInterface.cutPaper(this.id, type);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /** This method is used to feed the paper in dot units.
-  async unitFeed(
-    /** Expressed in the unit of measure given by MapMode (default dots).
-    ufCount: number,
+  /**
+   * Changes the set value of the printer setting.
+   *
+   * The value acquired by this API is notified to the listener method specified
+   * in the listener parameter.
+   */
+  async setPrinterSetting(
+    type: PrinterSettingType,
+    value: PrinterSettingValue,
+    timeout?: number,
   ) {
     try {
-      return await NativeInterface.unitFeed(this.id, ufCount);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /** This method is used to utilize label paper and black mark paper.
-  async markFeed(type: ESCPOSPrinterMarkFeedType) {
-    try {
-      return await NativeInterface.markFeed(this.id, type);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /** This method is used to open the cash drawer is connected to the printer.
-  async openDrawer(
-    drawer: ESCPOSPrinterDrawer,
-    /** 1 - 8 (x 100) msec
-    pulseLen: number,
-  ) {
-    try {
-      return await NativeInterface.openDrawer(this.id, drawer, pulseLen);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to start or end a transaction mode.
-   *
-   * If control is CMP_TP_TRANSACTION, then transaction mode is entered.
-   * Subsequent methods calls will buffer the print data. The methods applied to a
-   * transaction mode are as follows.
-   * - printText
-   * - printBitmap
-   * - printNVBitmap
-   * - printBarCode
-   * - printPDF417
-   * - printQRCode
-   * - printGS1DataBarStacked
-   * - cutPaper
-   * - unitFeed
-   * - markFeed
-   * - openDrawer
-   * - rotatePrint
-   * - pageModePrint
-   * - clearePrintArea
-   * - printData
-   * - printNormal
-   *
-   * If control is CMP_TP_NORMAL, then transaction mode is exited. If some data
-   * was buffered, then the buffered data is printed. The entire transaction is
-   * treated as one message.
-   *
-   * Calling the clearOutput method cancels transaction mode. Any buffered print
-   * lines are also cleared.
-
-  async transactionPrint(control: ESCPOSPrinterTransactionControl) {
-    try {
-      return await NativeInterface.transactionPrint(this.id, control);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to start or end a rotation print mode.
-   *
-   * If rotation includes `CMP_RP_ROTATE180`, then upside-down print mode is
-   * entered. The methods applied to a rotation print mode are as follows.
-   * - printText
-   * - printNormal
-   *
-   * If rotation includes `CMP_RP_BARCODE` and/or `CMP_RP_BITMAP`, the following
-   * methods are printed also rotated.
-   * - printBarcod
-   * - printPDF417
-   * - printQRCode
-   * - printGS1DataBarStacked
-   * - printBitmap
-   *
-   * If rotation is `CMP_RP_NORMAL`, then rotation mode is exited.
-
-  async rotatePrint(rotation: ESCPOSPrinterRotation) {
-    try {
-      return await NativeInterface.rotatePrint(this.id, rotation);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to start or end a Page Mode.
-   *
-   * If control is `CMP_PM_PAGE_MODE`, then Page Mode is entered. Subsequent methods
-   * calls will buffer the print data. The methods applied to a Page Mode are as
-   * follows.
-   * - printText
-   * - printBitmap
-   * - printBarCode
-   * - printPDF417
-   * - printQRCode
-   * - printGS1DataBarStacked
-   * - printNormal
-   *
-   * If control is `CMP_PM_PRINT_SAVE`, then Page Mode is not exited. If some data
-   * is buffered, then the buffered data is saved and printed. This control is
-   * used to print the same page layout with additional print items inside of the
-   * page.
-   *
-   * If control is `CMP_PM_NORMAL`, then Page Mode is exited. If some data is
-   * buffered, then the buffered data is printed. The buffered data will not be
-   * saved.
-   *
-   * If control is `CMP_PM_CANCEL`, then Page Mode is exited. If some data is
-   * buffered, then the buffered data is not printed and is not saved.
-   *
-   * Note that when the `pageModePrint` method is called, all of the data that
-   * is to be printed in the PageModePrintArea will be printed and the paper is
-   * fed to the end of the PageModePrintArea. If more than one PageModePrintArea
-   * is defined, then after the pageModePrint method is called, all of the data
-   * that is to be printed in the respective PageModePrintArea(s) will be printed
-   * and the paper will be fed to the end of the PageModePrintArea located the
-   * farthest “down” the sheet of paper.
-   *
-   * The entire Page Mode transaction is treated as one message. Calling the
-   * `clearOutput` method cancels Page Mode. Any buffered print lines are also
-   * cleared.
-
-  async pageModePrint(control: ESCPOSPrinterPageModeControl) {
-    try {
-      return await NativeInterface.pageModePrint(this.id, control);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /** This method is used to clear the area defined by the PageModePrintArea property.
-  async clearPrintArea() {
-    try {
-      return await NativeInterface.clearPrintArea(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to clear all buffered output data by tranzactionPrint
-   * method and `pageModePrint` method.
-   *
-   * Also, when possible, halts outputs that are in progress. At the same time,
-   * the command to clear print data on the printer is sent.
-
-  async clearOutput() {
-    try {
-      return await NativeInterface.clearOutput(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to send data bytes to the printer directly.
-   *
-   * It is usually not necessary, please use if you want to send ESC commands
-   * directly to the printer.
-   *
-   * If you want to use, please be careful so as not to affect the other methods.
-
-  async printData(data: string) {
-    try {
-      return await NativeInterface.printData(this.id, data);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This method is used to print using the escape sequences that are defined in
-   * the OPOS.
-   *
-   * Please refer to "Programming Manual" for more information.
-
-  async printNormal(data: string) {
-    try {
-      return await NativeInterface.printNormal(this.id, data);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * **THIS METHOD IS NOT IMPLEMENTED YET.**
-   *
-   * This method is used to print watermark.
-   *
-   * This is available with a printer of the CT-D151, CT-E601/651,
-   * CT-S251/601II/651II/801II/851II/751 series.
-   *
-   * The bitmap image stored in the flash memory of the printer is printed out as
-   * watermark.
-   *
-   * To use this method, you need to register of the logo in advance. Logo
-   * registration, please store it using `setNVBitmap` method or use the
-   * "POS Printer utility" of utility software for the printer.
-   *
-   * When the printing of watermark was stopped in `CMP_WM_STOP`, all other
-   * arguments are ignored.
-
-  async watermarkPrint(
-    start: ESCPOSPrinterWatermarkStart,
-    /** 1 - 20
-    nvImageNumber: number,
-    /**
-     * 0 - 65,535 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    pass: number,
-    /**
-     * 0 - 65,535 (dots)
-     *
-     * Expressed in the unit of measure given by MapMode (default dots).
-
-    feed: number,
-    /**
-     * 0: Infinite repetition
-     *
-     * 1 - 65,535: The repetition number of times
-
-    repeat: number,
-  ) {
-    try {
-      return await NativeInterface.watermarkPrint(
-        this.id,
-        start,
-        nvImageNumber,
-        pass,
-        feed,
-        repeat,
+      return await NativeInterface.setPrinterSetting(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+        type,
+        value,
       );
     } catch (error) {
       return handleRejection(error);
@@ -848,38 +1460,61 @@ class EpsonEscposprinter implements AsyncDisposable {
   }
 
   /**
-   * This method is used to connect printer and get the status of the printer.
-   * After the process is complete, disconnect the connection. (except
-   * connection type `CMP_PORT_SNMP`)
-   *
-   * The `CMP_PORT_SNMP` in the connect type can be used with printers connected
-   * to the network. By using this connection type, you can get the status
-   * regardless of other connections. In order to use this connection type, the
-   * printer supported with this function.
-
-  async printerCheckEx(
-    connectType: ESCPOSPrinterConnectType,
-    /**
-     * WiFi:
-     * - 0.0.0.0 ~ 255.255.255.255
-     *
-     * Bluetooth:
-     * - 00:00:00:00:00:00 ~ FF:FF:FF:FF:FF:FF
-     * - Device name (Automatic detection)
-
-    address = "",
-    port = 0,
-    timeout = 0,
-  ): Promise<ESCPOSPrinterStatus> {
-    address = address?.trim();
-
+   * Acquires the set value of the printer setting in JSON format.
+   */
+  async getPrinterSettingEx(timeout?: number) {
     try {
-      return await NativeInterface.printerCheckEx(
-        this.id,
-        connectType,
-        address,
-        port,
-        timeout,
+      const ret = await NativeInterface.getPrinterSettingEx(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
+
+      return ret as PrinterSettings;
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Changes the set value of the printer setting in JSON format.
+   *
+   * For the JSON used in this API, use the printer information JSON acquired
+   * with the getPrinterSettingEx API.
+   *
+   * Do not use the printer information JSON acquired from another model.
+   *
+   * Before executing the API, you can execute the verifyPassword API to make
+   * sure this API uses the correct password.
+   *
+   * Execute the getPrinterSettingEx API after executing this API, and check
+   * that the printer settings have been changed correctly.
+   *
+   * This API error status is the API processing result.
+   *
+   * The processing result of the devices using this API is notified to the
+   * listener method set by the `setSetPrinterSettingExListener` API of the
+   * Printer class.
+   *
+   * Do not execute this API in continuation without checking the processing
+   * result with the callback method.
+   */
+  async setPrinterSettingEx(
+    /**
+     * Specifies the set value of the printer setting in JSON format.
+     *
+     * Refer to JSON_Spec_sheet_revx.pdf included in the package for more
+     * information.
+     */
+    settings: PrinterSettings["Setting"],
+    password: string,
+    timeout?: number,
+  ) {
+    try {
+      return await NativeInterface.setPrinterSettingEx(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+        JSON.stringify({ Setting: settings }),
+        password,
       );
     } catch (error) {
       return handleRejection(error);
@@ -887,37 +1522,167 @@ class EpsonEscposprinter implements AsyncDisposable {
   }
 
   /**
-   * This method is used to connect printer and open the cash drawer is connected
-   * to the printer. After the process is complete, disconnect the connection.
+   * Compare the character string specified in this API with the administrator
+   * password set in the printer. Check to see if the specified character string
+   * and administrator password match.
    *
-   * This method can execute even if the printer error (cover open or paper empty).
-
-  openDrawerEx(
-    drawer: ESCPOSPrinterDrawer,
-    /** 1 - 8 (x 100) msec
-    pulseLen: number,
-    connectType: ESCPOSPrinterConnectType,
-    /**
-     * WiFi:
-     * - 0.0.0.0 ~ 255.255.255.255
-     *
-     * Bluetooth:
-     * - 00:00:00:00:00:00 ~ FF:FF:FF:FF:FF:FF
-     * - Device name (Automatic detection)
-
-    address = "",
-    port = 0,
-    timeout = 0,
+   * This API error status is the API processing result.
+   *
+   * The processing result of the devices using this API is notified to the
+   * listener method set by the `setVerifyPasswordListener` API of the Printer
+   * class.
+   *
+   * Do not execute this API in continuation without checking the processing
+   * result with the callback method.
+   */
+  async verifyPassword(
+    password: string,
+    timeout?: number,
   ) {
     try {
-      return NativeInterface.openDrawerEx(
-        this.id,
+      const ret = await NativeInterface.verifyPassword(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+        password,
+      );
+
+      return ret as PrinterCallbackCode;
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Acquires the printer serial number and the missing dot information of the
+   * thermal head.
+   *
+   * The value acquired by this API is notified to the listener method specified
+   * in the listener parameter.
+   */
+  async getPrinterInformation(timeout?: number) {
+    try {
+      const ret = await NativeInterface.getPrinterInformation(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
+
+      return ret as PrinterInformation;
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Acquires the firmware information for the connected printer.
+   */
+  async getPrinterFirmwareInfo(timeout?: number) {
+    try {
+      const ret = await NativeInterface.getPrinterFirmwareInfo(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
+
+      return ret as PrinterFirmwareInfomation;
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Compares the firmware of the connected printer with the firmware image
+   * specified by `updateFirmware`.
+   *
+   * Execute this API after executing `updateFirmware`, and confirm that the
+   * printer firmware has been overwritten by the firmware image specified in
+   * `updateFirmware`.
+   *
+   * The processing result of this API is notified to the listener method
+   * specified in the listener parameter.
+   */
+  async verifyUpdate(targetFirmwareInfo: PrinterFirmwareInfomation) {
+    try {
+      return await NativeInterface.verifyUpdate(
+        this.#id,
+        JSON.stringify(targetFirmwareInfo),
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Downloads the firmware image from the server and instructs the printer to
+   * overwrite the firmware image.
+   *
+   * Execute verifyUpdate after executing this API, and confirm that the printer
+   * firmware has been overwritten by the firmware image.
+   *
+   * The return value from this API is the result of instructing writing of the
+   * firmware image to the printer. It is not the execution result of the
+   * overall firmware update.
+   *
+   * The progress and processing result of this API is notified to the listener
+   * method specified in the listener parameter.
+   */
+  async updateFirmware(firmwareInfo: PrinterFirmwareInfomation) {
+    try {
+      const ret = await NativeInterface.updateFirmware(
+        this.#id,
+        JSON.stringify(firmwareInfo),
+      );
+
+      return ret as PrinterCallbackCode;
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Forcibly sends the error recovery command from a recoverable error status
+   * (example: auto cutter error).
+   *
+   * For details on recoverable errors, refer to the Technical Reference Guide
+   * of each printer.
+   *
+   * - After recovering from a recoverable error, the buffer of the printer is
+   *   reset.
+   * - For TM-H6000V, the “Command execution during offline” setting must be
+   *   enabled.  \
+   *   Refer to TM-H6000V Utility User’s Manual for more information.
+   * - Available during ePOS-Device XML control.
+   */
+  async forceRecover(timeout?: number) {
+    try {
+      return await NativeInterface.forceRecover(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Forcibly sends the drawer kick command.
+   *
+   * - The drawer and optional external buzzer cannot be connected
+   *   simultaneously.
+   * - For TM-H6000V, the “Command execution during offline” setting must be
+   *   enabled.  \
+   *   Refer to TM-H6000V Utility User’s Manual for more information.
+   * - Available during ePOS-Device XML control.
+   */
+  async forcePulse(
+    drawer: PrinterPulseDrawer,
+    time?: PrinterPulseTime,
+    timeout?: number,
+  ) {
+    try {
+      return await NativeInterface.forcePulse(
+        this.#id,
         drawer,
-        pulseLen,
-        connectType,
-        address,
-        port,
-        timeout,
+        time ?? Printer.PARAM_DEFAULT,
+        timeout ?? Printer.PARAM_DEFAULT,
       );
     } catch (error) {
       return handleRejection(error);
@@ -925,428 +1690,124 @@ class EpsonEscposprinter implements AsyncDisposable {
   }
 
   /**
-   * This method is used to set the timeout to check the print completion
-   * notification.
+   * Forcibly sends the buzzer sound command.
    *
-   * When you create an instance, the timeout is initialized to 0.
+   * - The drawer and optional external buzzer cannot be connected
+   *   simultaneously.
+   * - For TM-H6000V, the “Command execution during offline” setting must be
+   *   enabled.  \
+   *   Refer to TM-H6000V Utility User’s Manual for more information.
+   * - Available during ePOS-Device XML control.
+   */
+  async forceStopSound(timeout?: number) {
+    try {
+      return await NativeInterface.forceStopSound(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
+    } catch (error) {
+      return handleRejection(error);
+    }
+  }
+
+  /**
+   * Forcibly sends the ESC/POS command.
    *
-   * Please refer to "2.5.1. Function to detect the completion of printing"
-   * for details of the function to detect the completion of printing.
-
-  async setPrintCompletedTimeout(
-    /**
-     * 0: Automatically adjusts the timeout.
-     *
-     * Other Values: Specify the timeout. Expressed in milliseconds.
-
-    timeout: number,
+   * - For TM-H6000V, the “Command execution during offline” setting must be
+   *   enabled.  \
+   *   Refer to TM-H6000V Utility User’s Manual for more information.
+   * - Available during ePOS-Device XML control.
+   */
+  async forceCommand(
+    /** Base64 encoded byte[] */
+    data: string,
+    timeout?: number,
   ) {
     try {
-      return await NativeInterface.setPrintCompletedTimeout(this.id, timeout);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /** Sets the logging function. See "3.2 Logging function" for more details
-  async setLog(
-    /**
-     * 0: None
-     *
-     * 1: Access logs
-     *
-     * 2: Error logs
-
-    mode: 0 | 1 | 2,
-    /** The folder of the external storage path
-    path: string,
-    /**
-     * Maximum size (MB)
-     *
-     * 0: Unlimited
-
-    maxSize: number,
-  ) {
-    try {
-      return await NativeInterface.setLog(this.id, mode, path, maxSize);
+      return await NativeInterface.forceCommand(
+        this.#id,
+        data,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
     } catch (error) {
       return handleRejection(error);
     }
   }
 
   /**
-   * This property holds the page area. Expressed in the unit of measure given by
-   * MapMode (default dots). The string consists of two ASCII numbers separated by
-   * a comma, in the following order: horizontal size, vertical size.
+   * Forcibly sends the printer reset command.
    *
-   * This page area is determined by the hardware capability of the printer.
-   * - CT-S251 Series: “432,1662”
-   * - CT-S281/281II Series: “384,938”
-   * - CT-D101/150/151, CT-E301/351/601/651, CT-S310II/601/651/801/851/601II/651II/801II/851II/ 801III/851III/751/2000, PMU3300 Series: "576,1662"
-   * - CT-S4000/4500 Series: "832,1662"
-   * - CMP-20 Series: "384,938"
-   * - CMP-30 Series: "576,938"
-   *
-   * For example, if the string is “384,938”, then the page size is 384 horizontal
-   * units by 938 vertical units, and the station print area is a rectangle
-   * beginning at the top left point (0,0), and continuing up to the bottom
-   * right point (383,937).
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is set in connect method.
-
-  async getPageModeArea() {
+   * - For TM-H6000V, the “Command execution during offline” setting must be
+   *   enabled.  \
+   *   Refer to TM-H6000V Utility User’s Manual for more information.
+   * - Available during ePOS-Device XML control.
+   */
+  async forceReset(timeout?: number) {
     try {
-      return NativeInterface.getPageModeArea(this.id);
+      return await NativeInterface.forceReset(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
     } catch (error) {
       return handleRejection(error);
     }
+  }
+
+  // [ ] Custom QoL methods on top of wrapper methods
+
+  /**
+   * Sending print data in the callback as a single transaction.
+   */
+  async transaction(callback: (printer: Printer) => Promise<void>) {
+    await this.beginTransaction();
+    await callback(this);
+    // [ ] Check if we need to call `endTransaction` on error
+    // [ ] await this.sendData(timeout);
+    await this.endTransaction();
   }
 
   /**
-   * This property holds the print area of Page Mode. Expressed in the unit of
-   * measure given by MapMode (default dots). The maximum print area is the page
-   * area. The string consists of four ASCII numbers separated by commas, in the
-   * following order: horizontal start, vertical start, horizontal size, vertical
-   * size.
-   *
-   * Text written to the right edge of the print area will wrap to the next line.
-   * Any text or image written beyond the bottom of the print area will be
-   * truncated.
-   *
-   * For example, if the string is “50,100,200,400”, then the station print area
-   * is a rectangle beginning at the point (50,100), and continuing up to the
-   * point (249,499).
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is initialized to “0,0,0,0” at connect method.
-
-  async getPageModePrintArea() {
-    try {
-      return NativeInterface.getPageModePrintArea(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  async setPageModePrintArea(area: string) {
-    try {
-      return NativeInterface.setPageModePrintArea(this.id, area);
-    } catch (error) {
-      return handleRejection(error);
-    }
+   * Sending print data in the callback as a single rotate batch.
+   */
+  async rotate(callback: (printer: Printer) => Promise<void>) {
+    await this.addRotateBegin();
+    await callback(this);
+    await this.addRotateEnd();
   }
 
   /**
-   * This property holds the print direction of the Page Mode print area. The
-   * print direction values are as follows.
-   *
-   * | Value                  | Meaning                                                                 |
-   * | :--------------------- | :---------------------------------------------------------------------- |
-   * | `CMP_PD_LEFT_TO_RIGHT` | Print left to right, starting at top left position of the print area,   |
-   * |                        | i.e., normal printing.                                                  |
-   * | `CMP_PD_BOTTOM_TO_TOP` | Print bottom to top, starting at the bottom left position of the print  |
-   * |                        | area, i.e., rotated left 90° printing.                                  |
-   * | `CMP_PD_RIGHT_TO_LEFT` | Print right to left, starting at the bottom right position of the print |
-   * |                        | area, i.e., upside down printing.                                       |
-   * | `CMP_PD_TOP_TO_BOTTOM` | Print top to bottom, starting at the top right position of the print    |
-   * |                        | area, i.e., rotated right 90° printing.                                 |
-   *
-   * Setting this property may also change PageModeHorizontalPosition and
-   * PageModeVerticalPosition. Setting this property will have an effect on the
-   * current print area. By changing the print area, it is possible to generate a
-   * receipt or slip with text printed in multiple rotations.
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is initialized to `CMP_PD_LEFT_TO_RIGHT` at connect method.
-
-  async getPageModePrintDirection(): Promise<ESCPOSPrinterPageModePrintDirection> {
-    try {
-      return NativeInterface.getPageModePrintDirection(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  async setPageModePrintDirection(
-    direction: ESCPOSPrinterPageModePrintDirection,
-  ) {
-    try {
-      return NativeInterface.setPageModePrintDirection(this.id, direction);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This property holds the horizontal start position offset within the Page Mode
-   * print area, expressed in the unit of dot.
-   *
-   * The horizontal direction is the same as the actual PageModePrintDirection
-   * property.
-   *
-   * A read/get on this property will return the horizontal position offset set by
-   * the last write/set and not the current position.
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is initialized to zero (0) at connect method.
-
-  async getPageModeHorizontalPosition() {
-    try {
-      return NativeInterface.getPageModeHorizontalPosition(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  async setPageModeHorizontalPosition(position: number) {
-    try {
-      return NativeInterface.setPageModeHorizontalPosition(this.id, position);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This property holds the vertical start position offset within the Page Mode
-   * print area, expressed in the unit of dot.
-   *
-   * The vertical direction is perpendicular to the direction specified in the
-   * actual PageModePrintDirection property.
-   *
-   * A read/get on this property will return the vertical position offset set by
-   * the last write/set and not the current position.
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is initialized to zero (0) at connect method.
-
-  async getPageModeVerticalPosition() {
-    try {
-      return NativeInterface.getPageModeVerticalPosition(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  async setPageModeVerticalPosition(position: number) {
-    try {
-      return NativeInterface.setPageModeVerticalPosition(this.id, position);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This property holds the spacing of each single-high print line, including
-   * both the printed line height plus the whitespace between each pair of lines,
-   * expressed in the unit of dot.
-   *
-   * Depending upon the current line spacing, a multi-high print line might exceed
-   * this value. In this case, the whitespace is zero.
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is initialized to 34 at connect method.
-
-  async getRecLineSpacing() {
-    try {
-      return NativeInterface.getRecLineSpacing(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  async setRecLineSpacing(spacing: number) {
-    try {
-      return NativeInterface.setRecLineSpacing(this.id, spacing);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /**
-   * This property holds the mapping mode of the printer. The mapping mode defines
-   * the unit of measure used for other properties, such as line heights and line
-   * spacing. The map mode values are as follows.
-   *
-   * | Value           | Meaning                  |
-   * |:----------------|:-------------------------|
-   * | CMP_MM_DOTS     | The printer’s dot width. |
-   * | CMP_MM_TWIPS    | 1/1440 of an inch.       |
-   * | CMP_MM_ENGLISH  | 0.001 inch.              |
-   * | CMP_MM_METRIC   | 0.01 millimeter.         |
-   *
-   * The method and the properties to be affected by the MapMode property are as
-   * follows:
-   * - `printBitmap` method: width, alignment
-   * - `printBitmapData` method: width, alignment
-   * - `setNVBitmap` method: width
-   * - `printBarcode` method: height, width, alignment
-   * - `printPDF417` method: moduleWidth, alignment
-   * - `printQRCode` method: moduleSize, alignment
-   * - `printGS1DataBarStacked` method: moduleSize, maxSize, alignment
-   * - `unitFeed` method: ufCount
-   * - `watermarkPrint` method: pass, feed
-   * - `PageModeArea` property
-   * - `PageModePrintArea` property
-   * - `PageModeHorizontalPosition` property
-   * - `PageModeVerticalPosition` property
-   * - `RecLineSpacing` property
-   *
-   * The connect method must be complete before accessing this property. This
-   * property is initialized to CMP_MM_DOTS at connect method.
-
-  async getMapMode(): Promise<ESCPOSPrinterMapMode> {
-    try {
-      return await NativeInterface.getMapMode(this.id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  async setMapMode(mode: ESCPOSPrinterMapMode) {
-    try {
-      return await NativeInterface.setMapMode(this.id, mode);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  getRecCharacterSpacing() {
-    throw new Error(
-      "Not implemented in iOS SDK, file a feature request if you need this in Android.",
-    );
-  }
-
-  setRecCharacterSpacing(_spacing: number) {
-    throw new Error(
-      "Not implemented in iOS SDK, file a feature request if you need this in Android.",
-    );
-  }
-
-  getRecKanjiLeftSpacing() {
-    throw new Error(
-      "Not implemented in iOS SDK, file a feature request if you need this in Android.",
-    );
-  }
-
-  setRecKanjiLeftSpacing(_spacing: number) {
-    throw new Error(
-      "Not implemented in iOS SDK, file a feature request if you need this in Android.",
-    );
-  }
-
-  getRecKanjiRightSpacing() {
-    throw new Error(
-      "Not implemented in iOS SDK, file a feature request if you need this in Android.",
-    );
-  }
-
-  setRecKanjiRightSpacing(_spacing: number) {
-    throw new Error(
-      "Not implemented in iOS SDK, file a feature request if you need this in Android.",
-    );
+   * Sending print data in the callback as a single page.
+   */
+  async page(callback: (printer: Printer) => Promise<void>) {
+    await this.addPageBegin();
+    await callback(this);
+    await this.addPageEnd();
   }
 }
 
-/**
- * This method is used to search the printer. Please specify the type of the
- * printer connection and the search time. Before the execution of this method,
- * must execute the setContext method. This method cannot be used on the
- * simulator.
- *
- * After search time passed, set a result to the result parameter and return the
- * information of the found printers as array type.
- *
- * In the case of CMP_PORT_WiFi for the connection type, you can search only
- * the printers of CT-D101/150/151, CT-E301/351/601/651,
- * CT-S251/310II/601/651/801/851/601II/651II/801II/851II/751/4500 series.
- * Recommended value of search time is more than 3 seconds. When the search time
- * is shorter than the second, a search may fail by the network situation.
- *
- * In the case of CMP_PORT_Bluetooth or CMP_PORT_Bluetooth_Insecure for the
- * connection type, you can get the paired address when specifying 0 for the
- * search time. When specifying 1 - 30 for the search time you can get the
- * connectable address. Recommended value of search time is more than 10 seconds.
- *
- * When the search time is shorter than the second, a search may fail by the
- * Bluetooth situation.
+// [ ] `setStatusChangeEventListener`
+// [ ] `setReceiveEventListener`
+// [ ] `setGetPrinterSettingExListener` should be registered on-demand when `getPrinterSettingEx` is called.
+// [ ] `getPrinterSettingEx` concurrency and racing condition
+// [ ] `setSetPrinterSettingExListener` should be registered on-demand when `setPrinterSettingEx` is called.
+// [ ] `setPrinterSettingEx` concurrency and racing condition
+// [ ] `setVerifyPasswordListener` should be registered on-demand when `verifyPassword` is called.
+// [ ] export search printer methods using `Discover` class
 
-export async function searchEpsonPrinter(
-  connectType: ESCPOSPrinterSearchType,
-  timeout?: number,
+export async function downloadFirmwareList(
+  printerModel: string,
+  option: string,
 ) {
   try {
-    const printers = await NativeInterface.searchEpsonPrinter(
-      connectType,
-      timeout ?? (connectType === ESCPOSConst.CMP_PORT_WiFi ? 5 : 10),
+    const ret = await NativeInterface.downloadFirmwareList(
+      printerModel,
+      option,
     );
 
-    return printers as EpsonPrinerInfo[];
+    return ret as PrinterFirmwareInfomation[];
   } catch (error) {
     return handleRejection(error);
   }
 }
 
-/**
- * This method is used to search the printer. Please specify the type of the
- * printer connection and the search time. Before the execution of this method,
- * must execute the setContext method. This method cannot be used on the
- * simulator.
- *
- * After search time passed, set a result to the result parameter and return the
- * information of the found printers as String array type.
- *
- * In the case of CMP_PORT_WiFi for the connection type, you can search only the
- * printers of CT-D101/150/151, CT-E301/351/601/651,
- * CT-S251/310II/601/651/801/851/601II/651II/801II/851II/751/4500 series.
- * Recommended value of search time is more than 3 seconds. When the search time
- * is shorter than the second, a search may fail by the network situation.
- *
- * In the case of CMP_PORT_Bluetooth or CMP_PORT_Bluetooth_Insecure for the
- * connection type, you can get the paired address when specifying 0 for the
- * search time. When specifying 1 - 30 for the search time you can get the
- * connectable address. Recommended value of search time is more than 10 seconds.
- *
- * When the search time is shorter than the second, a search may fail by the
- * Bluetooth situation.
-
-export async function searchESCPOSPrinter(
-  connectType: ESCPOSPrinterSearchType,
-  timeout?: number,
-) {
-  try {
-    return await NativeInterface.searchESCPOSPrinter(
-      connectType,
-      timeout ?? (connectType === ESCPOSConst.CMP_PORT_WiFi ? 5 : 10),
-    );
-  } catch (error) {
-    return handleRejection(error);
-  }
-}
-
-/**
- * This method is used to get a numerical value for the version number of this SDK.
- *
- * @returns Return a numerical value for the version number of this SDK. (Ver1.00 is 100)
-
-export async function getVersionCode() {
-  try {
-    return NativeInterface.getVersionCode();
-  } catch (error) {
-    return handleRejection(error);
-  }
-}
-
-/**
- * This method is used to get a string for the version number of this SDK.
- *
- * @returns Return a string for the version number of this SDK. (Ver1.00 is "1.00")
-
-export async function getVersionName() {
-  try {
-    return NativeInterface.getVersionName();
-  } catch (error) {
-    return handleRejection(error);
-  }
-}
-*/
+// [ ] Printer searching methods

@@ -1,262 +1,243 @@
-import type { TurboModule } from "react-native";
-import { TurboModuleRegistry } from "react-native";
+import { type TurboModule, TurboModuleRegistry } from "react-native";
+import type { PrinterLocale, PrinterSeries } from "./PrinterConst";
 
 export interface Spec extends TurboModule {
-  /* [ ] Implement EPSON SDK methods
   connect(
-    /** @type ESCPOSPrinterConnectType
-    connectType: number,
-    address: string,
-    port: number,
+    /** @type PrinterSeries */
+    series: number,
+    /** @type PrinterLocale */
+    lang: number,
+    target: string,
     timeout: number,
   ): Promise<number>;
 
   disconnect(id: number): Promise<void>;
 
-  setEncoding(id: number, encoding: string): Promise<void>;
+  startMonitor(id: number): Promise<void>;
 
-  printerCheck(id: number): Promise<void>;
+  stopMonitor(id: number): Promise<void>;
 
-  status(
+  getStatus(id: number): Promise<object>;
+
+  sendData(id: number, timeout: number): Promise<void>;
+
+  beginTransaction(id: number): Promise<void>;
+
+  endTransaction(id: number): Promise<void>;
+
+  requestPrintJobStatus(id: number, printJobId: string): Promise<void>;
+
+  clearCommandBuffer(id: number): Promise<void>;
+
+  addTextAlign(id: number, align: number): Promise<void>;
+
+  addLineSpace(id: number, linespc: number): Promise<void>;
+
+  addTextRotate(id: number, rotate: number): Promise<void>;
+
+  addText(id: number, text: string): Promise<void>;
+
+  addTextLang(id: number, lang: number): Promise<void>;
+
+  addTextFont(id: number, font: number): Promise<void>;
+
+  addTextSmooth(id: number, smooth: number): Promise<void>;
+
+  addTextSize(id: number, width: number, height: number): Promise<void>;
+
+  addTextStyle(
     id: number,
-    /** ESCPOSPrinterStatus
-    type: number,
-  ): Promise<number>;
-
-  printText(
-    id: number,
-    data: string,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-    /** @type ESCPOSPrinterTextAttribute
-    attribute: number,
-    /** @type ESCPOSPrinterTextSize
-    textSize: number,
+    reverse: number,
+    ul: number,
+    em: number,
+    color: number,
   ): Promise<void>;
 
-  printPaddingText(
-    id: number,
-    data: string,
-    /** @type ESCPOSPrinterTextAttribute
-    attribute: number,
-    /** @type ESCPOSPrinterTextSize
-    textSize: number,
-    length: number,
-    /** @type ESCPOSConst.CMP_SIDE_RIGHT | ESCPOSConst.CMP_SIDE_LEFT
-    side: number,
-  ): Promise<void>;
+  addHPosition(id: number, x: number): Promise<void>;
 
-  printTextLocalFont(
-    id: number,
-    data: string,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-    /** @type ESCPOSPrinterTypeface
-    fontType: string,
-    point: number,
-    /** @type ESCPOSPrinterFontStyle
-    style: number,
-    /** 1-1000
-    hRatio: number,
-    /** 1-1000
-    vRatio: number,
-  ): Promise<void>;
+  addFeedUnit(id: number, unit: number): Promise<void>;
 
-  printBitmap(
+  addFeedLine(id: number, line: number): Promise<void>;
+
+  addImage(
     id: number,
     data: string,
+    x: number,
+    y: number,
     width: number,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-    /** @type ESCPOSPrinterBitmapMode
-    mode: number,
-  ): Promise<void>;
-
-  printBarCode(
-    id: number,
-    data: string,
-    /** @type ESCPOSPrinterBarcodeType
-    symbology: number,
     height: number,
+    color: number,
+    mode: number,
+    halftone: number,
+    brightness: number,
+    compress: number,
+  ): Promise<void>;
+
+  addLogo(id: number, key1: number, key2: number): Promise<void>;
+
+  addBarcode(
+    id: number,
+    data: string,
+    type: number,
+    hri: number,
+    font: number,
     width: number,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-    /** @type ESCPOSPrinterTextPosition
-    textPosition: number,
+    height: number,
   ): Promise<void>;
 
-  printPDF417(
+  addSymbol(
     id: number,
     data: string,
-    digits: number,
-    steps: number,
-    moduleWidth: number,
-    stepHeight: number,
-    /** @type ESCPOSPrinterPDF417ECLevel
-    ECLevel: number,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-  ): Promise<void>;
-
-  printQRCode(
-    id: number,
-    data: string,
-    moduleSize: number,
-    /** @type ESCPOSPrinterQRCodeECLevel
-    ECLevel: number,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-  ): Promise<void>;
-
-  printGS1DataBarStacked(
-    id: number,
-    data: string,
-    /** @type ESCPOSPrinterGS1DatabarType
-    symbology: number,
-    moduleSize: number,
-    maxSize: number,
-    /** @type ESCPOSPrinterPrintAlignment
-    alignment: number,
-  ): Promise<void>;
-
-  cutPaper(
-    id: number,
-    /** @type ESCPOSPrinterCutType
     type: number,
+    level: number,
+    width: number,
+    height: number,
+    size: number,
   ): Promise<void>;
 
-  unitFeed(id: number, ufCount: number): Promise<void>;
-
-  markFeed(
+  addHLine(
     id: number,
-    /** @type ESCPOSPrinterMarkFeedType
-    type: number,
+    x1: number,
+    x2: number,
+    lineStyle: number,
   ): Promise<void>;
 
-  openDrawer(
+  addVLineBegin(
     id: number,
-    /** @type ESCPOSPrinterDrawer
-    drawer: number,
-    pulseLen: number,
-  ): Promise<void>;
-
-  transactionPrint(
-    id: number,
-    /** @type ESCPOSPrinterTransactionControl
-    control: number,
-  ): Promise<void>;
-
-  rotatePrint(
-    id: number,
-    /** @type ESCPOSPrinterRotation
-    rotation: number,
-  ): Promise<void>;
-
-  pageModePrint(
-    id: number,
-    /** @type ESCPOSPrinterPageModeControl
-    control: number,
-  ): Promise<void>;
-
-  clearPrintArea(id: number): Promise<void>;
-
-  clearOutput(id: number): Promise<void>;
-
-  printData(id: number, data: string): Promise<void>;
-
-  printNormal(id: number, data: string): Promise<void>;
-
-  watermarkPrint(
-    id: number,
-    start: number,
-    nvImageNumber: number,
-    pass: number,
-    feed: number,
-    repeat: number,
-  ): Promise<void>;
-
-  printNVBitmap(id: number, nvImageNumber: number): Promise<void>;
-
-  searchEpsonPrinter(
-    /** @type ESCPOSPrinterSearchType
-    connectType: number,
-    timeout: number,
-  ): Promise<object[]>;
-
-  searchESCPOSPrinter(
-    /** @type ESCPOSPrinterSearchType
-    connectType: number,
-    timeout: number,
-  ): Promise<string[]>;
-
-  printerCheckEx(
-    id: number,
-    /** @type ESCPOSPrinterConnectType
-    connectType: number,
-    address: string,
-    port: number,
-    timeout: number,
+    x: number,
+    lineStyle: number,
   ): Promise<number>;
 
-  openDrawerEx(
+  addVLineEnd(id: number, lineId: number): Promise<void>;
+
+  addPageBegin(id: number): Promise<void>;
+
+  addPageEnd(id: number): Promise<void>;
+
+  addPageArea(
     id: number,
-    /** @type ESCPOSPrinterDrawer
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): Promise<void>;
+
+  addPageDirection(id: number, direction: number): Promise<void>;
+
+  addPagePosition(id: number, x: number, y: number): Promise<void>;
+
+  addPageLine(
+    id: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    lineStyle: number,
+  ): Promise<void>;
+
+  addPageRectangle(
+    id: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    lineStyle: number,
+  ): Promise<void>;
+
+  addRotateBegin(id: number): Promise<void>;
+
+  addRotateEnd(id: number): Promise<void>;
+
+  addCut(id: number, type: number): Promise<void>;
+
+  addPulse(id: number, drawer: number, time: number): Promise<void>;
+
+  addSound(
+    id: number,
+    pattern: number,
+    repeat: number,
+    cycle: number,
+  ): Promise<void>;
+
+  addFeedPosition(id: number, position: number): Promise<void>;
+
+  addLayout(
+    id: number,
+    type: number,
+    width: number,
+    height: number,
+    marginTop: number,
+    marginBottom: number,
+    offsetCut: number,
+    offsetLabel: number,
+  ): Promise<void>;
+
+  addCommand(id: number, data: string): Promise<void>;
+
+  getMaintenanceCounter(
+    id: number,
+    timeout: number,
+    type: number,
+  ): Promise<number>;
+
+  resetMaintenanceCounter(
+    id: number,
+    timeout: number,
+    type: number,
+  ): Promise<void>;
+
+  getPrinterSetting(
+    id: number,
+    timeout: number,
+    type: number,
+  ): Promise<number>;
+
+  setPrinterSetting(
+    id: number,
+    timeout: number,
+    type: number,
+    value: number,
+  ): Promise<void>;
+
+  getPrinterSettingEx(id: number, timeout: number): Promise<object>;
+
+  setPrinterSettingEx(
+    id: number,
+    timeout: number,
+    json: string,
+    administratorPassword: string,
+  ): Promise<void>;
+
+  verifyPassword(
+    id: number,
+    timeout: number,
+    administratorPassword: string,
+  ): Promise<number>;
+
+  getPrinterInformation(id: number, timeout: number): Promise<object>;
+
+  downloadFirmwareList(printerModel: string, option: string): Promise<object[]>;
+
+  getPrinterFirmwareInfo(id: number, timeout: number): Promise<object>;
+
+  verifyUpdate(id: number, targetFirmwareInfo: string): Promise<number>;
+
+  updateFirmware(id: number, targetFirmwareInfo: string): Promise<number>;
+
+  forceRecover(id: number, timeout: number): Promise<void>;
+
+  forcePulse(
+    id: number,
     drawer: number,
-    pulseLen: number,
-    /** @type ESCPOSPrinterConnectType
-    connectType: number,
-    address: string,
-    port: number,
+    pulseTime: number,
     timeout: number,
   ): Promise<void>;
 
-  setPrintCompletedTimeout(id: number, timeout: number): Promise<void>;
+  forceStopSound(id: number, timeout: number): Promise<void>;
 
-  setLog(
-    id: number,
-    mode: number,
-    path: string,
-    maxSize: number,
-  ): Promise<void>;
+  forceCommand(id: number, data: string, timeout: number): Promise<void>;
 
-  getVersionCode(): Promise<number>;
-
-  getVersionName(): Promise<string>;
-
-  getPageModeArea(id: number): Promise<string>;
-
-  getPageModePrintArea(id: number): Promise<string>;
-
-  setPageModePrintArea(id: number, area: string): Promise<void>;
-
-  getPageModePrintDirection(id: number): Promise<number>;
-
-  setPageModePrintDirection(
-    id: number,
-    /** @type ESCPOSPrinterPageModePrintDirection
-    direction: number,
-  ): Promise<void>;
-
-  getPageModeHorizontalPosition(id: number): Promise<number>;
-
-  setPageModeHorizontalPosition(id: number, position: number): Promise<void>;
-
-  getPageModeVerticalPosition(id: number): Promise<number>;
-
-  setPageModeVerticalPosition(id: number, position: number): Promise<void>;
-
-  getRecLineSpacing(id: number): Promise<number>;
-
-  setRecLineSpacing(id: number, spacing: number): Promise<void>;
-
-  getMapMode(id: number): Promise<number>;
-
-  setMapMode(
-    id: number,
-    /** @type ESCPOSPrinterMapMode
-    mode: number,
-  ): Promise<void>;
-  */
+  forceReset(id: number, timeout: number): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>("EpsonEscposprinter");
