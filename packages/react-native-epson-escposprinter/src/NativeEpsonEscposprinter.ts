@@ -1,7 +1,11 @@
-import { type TurboModule, TurboModuleRegistry } from "react-native";
+import {
+  TurboModuleRegistry,
+  type NativeModule,
+  type TurboModule,
+} from "react-native";
 import type { PrinterLocale, PrinterSeries } from "./PrinterConst";
 
-export interface Spec extends TurboModule {
+export interface Spec extends TurboModule, NativeModule {
   connect(
     /** @type PrinterSeries */
     series: number,
@@ -102,11 +106,7 @@ export interface Spec extends TurboModule {
     lineStyle: number,
   ): Promise<void>;
 
-  addVLineBegin(
-    id: number,
-    x: number,
-    lineStyle: number,
-  ): Promise<number>;
+  addVLineBegin(id: number, x: number, lineStyle: number): Promise<number>;
 
   addVLineEnd(id: number, lineId: number): Promise<void>;
 
@@ -172,7 +172,7 @@ export interface Spec extends TurboModule {
     offsetLabel: number,
   ): Promise<void>;
 
-  addCommand(id: number, data: string): Promise<void>;
+  addCommand(id: number, command: string): Promise<void>;
 
   getMaintenanceCounter(
     id: number,
@@ -186,11 +186,7 @@ export interface Spec extends TurboModule {
     type: number,
   ): Promise<void>;
 
-  getPrinterSetting(
-    id: number,
-    timeout: number,
-    type: number,
-  ): Promise<number>;
+  getPrinterSetting(id: number, timeout: number, type: number): Promise<number>;
 
   setPrinterSetting(
     id: number,
@@ -216,7 +212,11 @@ export interface Spec extends TurboModule {
 
   getPrinterInformation(id: number, timeout: number): Promise<object>;
 
-  downloadFirmwareList(printerModel: string, option: string): Promise<object[]>;
+  downloadFirmwareList(
+    id: number,
+    printerModel: string,
+    option: string,
+  ): Promise<object[]>;
 
   getPrinterFirmwareInfo(id: number, timeout: number): Promise<object>;
 
@@ -238,6 +238,10 @@ export interface Spec extends TurboModule {
   forceCommand(id: number, data: string, timeout: number): Promise<void>;
 
   forceReset(id: number, timeout: number): Promise<void>;
+
+  discoveryStart(filter: object): Promise<void>;
+
+  discoveryStop(): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>("EpsonEscposprinter");

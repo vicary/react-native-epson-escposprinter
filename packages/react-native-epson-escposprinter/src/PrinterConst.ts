@@ -227,12 +227,7 @@ export type PrinterSettings = {
         | "42¥¥/32"
         | "48"
         | "42";
-      RollPaperWidth:
-        | "80mm"
-        | "76mm"
-        | "69.5mm"
-        | "58mm"
-        | "57.5mm";
+      RollPaperWidth: "80mm" | "76mm" | "69.5mm" | "58mm" | "57.5mm";
       NearEndSetting: "Disable" | "Enable";
       PaperWidthWithGuide: "40mm" | "58mm";
     };
@@ -281,9 +276,8 @@ export type PrinterInformation = {
 };
 
 export type PrinterFirmwareInfomation = {
-  version: string;
   model: string;
-  requestModel: string;
+  version: string;
 };
 
 export const enum PrinterAlign {
