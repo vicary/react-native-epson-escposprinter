@@ -649,7 +649,7 @@ class Printer extends CommonPrinter implements AsyncDisposable {
    */
   async addImage(
     /** Bitmap data in base64 format. */
-    data: string,
+    image: string,
     /** Specifies the horizontal start position of the print area (in pixels). */
     x: number,
     /** Specifies the vertical start position of the print area (in pixels). */
@@ -681,7 +681,7 @@ class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addImage(
         this.#id,
-        data,
+        image,
         Math.max(0, Math.min(65534, x)),
         Math.max(0, Math.min(65534, y)),
         Math.max(1, Math.min(65535, width)),
@@ -757,7 +757,7 @@ class Printer extends CommonPrinter implements AsyncDisposable {
      * | \xnn   | Hexadecimal control code   |
      * | \\     | Backslash                  |
      */
-    data: string,
+    barcode: string,
     /** Specifies the barcode type. */
     type: PrinterBarcodeType,
     /** Specifies the HRI (Human Readable Interpretation) setting. */
@@ -772,7 +772,7 @@ class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addBarcode(
         this.#id,
-        data,
+        barcode,
         type,
         hri,
         font,
@@ -799,7 +799,7 @@ class Printer extends CommonPrinter implements AsyncDisposable {
    */
   async addSymbol(
     /** Specifies the symbol data as a text string. */
-    data: string,
+    symbol: string,
     type: PrinterSymbolTypePdf,
     level: PrinterSymbolLevelPdf,
     width: number,
@@ -807,23 +807,19 @@ class Printer extends CommonPrinter implements AsyncDisposable {
     size: number,
   ): Promise<void>;
   async addSymbol(
-    data: string,
+    symbol: string,
     type: PrinterSymbolTypeQrcode,
     level: PrinterSymbolLevelQrcode,
     width: number,
-    height: number,
-    size: number,
   ): Promise<void>;
   async addSymbol(
-    data: string,
+    symbol: string,
     type: PrinterSymbolTypeAztecCode,
     level: number,
     width: number,
-    height: number,
-    size: number,
   ): Promise<void>;
   async addSymbol(
-    data: string,
+    symbol: string,
     type: PrinterSymbolTypeOthers,
     level: number, // PARAM_DEFAULT
     width: number,
@@ -831,7 +827,7 @@ class Printer extends CommonPrinter implements AsyncDisposable {
     size: number,
   ): Promise<void>;
   async addSymbol(
-    data: string,
+    symbol: string,
     type:
       | PrinterSymbolTypePdf
       | PrinterSymbolTypeQrcode
@@ -839,13 +835,13 @@ class Printer extends CommonPrinter implements AsyncDisposable {
       | PrinterSymbolTypeOthers,
     level: number,
     width: number,
-    height: number,
-    size: number,
+    height: number = 0,
+    size: number = 0,
   ) {
     try {
       return await NativeInterface.addSymbol(
         this.#id,
-        data,
+        symbol,
         type,
         level,
         Math.max(2, Math.min(16, width)),

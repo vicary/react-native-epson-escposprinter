@@ -7,214 +7,67 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 abstract class EpsonEscposprinterSpec internal constructor(context: ReactApplicationContext) :
     ReactContextBaseJavaModule(context) {
 
-  // abstract fun connect(
-  //   connectType: Double,
-  //   address: String,
-  //   port: Double,
-  //   timeout: Double,
-  //   promise: Promise
-  // )
-  // abstract fun disconnect(id: Double, promise: Promise)
-  // abstract fun setEncoding(id: Double, encoding: String, promise: Promise)
-  // abstract fun printerCheck(id: Double, promise: Promise)
-  // abstract fun status(id: Double, type: Double, promise: Promise)
-  // abstract fun printText(
-  //   id: Double,
-  //   data: String,
-  //   alignment: Double,
-  //   attribute: Double,
-  //   textSize: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printPaddingText(
-  //   id: Double,
-  //   data: String,
-  //   attribute: Double,
-  //   textSize: Double,
-  //   length: Double,
-  //   side: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printTextLocalFont(
-  //   id: Double,
-  //   data: String,
-  //   alignment: Double,
-  //   fontType: String,
-  //   point: Double,
-  //   style: Double,
-  //   hRatio: Double,
-  //   vRatio: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printBitmap(
-  //   id: Double,
-  //   data: String,
-  //   width: Double = ESCPOSConst.CMP_BM_ASIS.toDouble(),
-  //   alignment: Double = ESCPOSConst.CMP_ALIGNMENT_CENTER.toDouble(),
-  //   mode: Double = 0.0,
-  //   promise: Promise
-  // )
-  // abstract fun printBarCode(
-  //   id: Double,
-  //   data: String,
-  //   symbology: Double,
-  //   height: Double,
-  //   width: Double,
-  //   alignment: Double,
-  //   textPosition: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printPDF417(
-  //   id: Double,
-  //   data: String,
-  //   digits: Double,
-  //   steps: Double,
-  //   moduleWidth: Double,
-  //   stepHeight: Double,
-  //   ECLevel: Double,
-  //   alignment: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printQRCode(
-  //   id: Double,
-  //   data: String,
-  //   moduleSize: Double,
-  //   ECLevel: Double,
-  //   alignment: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printGS1DataBarStacked(
-  //   id: Double,
-  //   data: String,
-  //   symbology: Double,
-  //   moduleSize: Double,
-  //   maxSize: Double,
-  //   alignment: Double,
-  //   promise: Promise
-  // )
-  // abstract fun cutPaper(id: Double, type: Double, promise: Promise)
-  // abstract fun unitFeed(id: Double, ufCount: Double, promise: Promise)
-  // abstract fun markFeed(id: Double, type: Double, promise: Promise)
-  // abstract fun openDrawer(id: Double, drawer: Double, pulseLen: Double, promise: Promise)
-  // abstract fun transactionPrint(id: Double, control: Double, promise: Promise)
-  // abstract fun rotatePrint(id: Double, rotation: Double, promise: Promise)
-  // abstract fun pageModePrint(id: Double, control: Double, promise: Promise)
-  // abstract fun clearPrintArea(id: Double, promise: Promise)
-  // abstract fun clearOutput(id: Double, promise: Promise)
-  // abstract fun printData(id: Double, data: String, promise: Promise)
-  // abstract fun printNormal(id: Double, data: String, promise: Promise)
-  // abstract fun watermarkPrint(
-  //   id: Double,
-  //   start: Double,
-  //   nvImageNumber: Double,
-  //   pass: Double,
-  //   feed: Double,
-  //   repeat: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printNVBitmap(
-  //   id: Double,
-  //   nvImageNumber: Double,
-  //   promise: Promise
-  // )
-  // abstract fun searchEpsonPrinter(
-  //   connectType: Double,
-  //   timeout: Double,
-  //   promise: Promise
-  // )
-  // abstract fun searchESCPOSPrinter(
-  //   connectType: Double,
-  //   timeout: Double,
-  //   promise: Promise
-  // )
-  // abstract fun printerCheckEx(
-  //   id: Double,
-  //   connectType: Double,
-  //   address: String,
-  //   port: Double,
-  //   timeout: Double,
-  //   promise: Promise
-  // )
-  // abstract fun openDrawerEx(
-  //   id: Double,
-  //   drawer: Double,
-  //   pulseLen: Double,
-  //   connectType: Double,
-  //   address: String,
-  //   port: Double,
-  //   timeout: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setPrintCompletedTimeout(
-  //   id: Double,
-  //   timeout: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setLog(
-  //   id: Double,
-  //   mode: Double,
-  //   path: String,
-  //   maxSize: Double,
-  //   promise: Promise
-  // )
-  // abstract fun getVersionCode(promise: Promise)
-  // abstract fun getVersionName(promise: Promise)
-  // abstract fun getPageModeArea(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun getPageModePrintArea(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setPageModePrintArea(
-  //   id: Double,
-  //   area: String,
-  //   promise: Promise
-  // )
-  // abstract fun getPageModePrintDirection(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setPageModePrintDirection(
-  //   id: Double,
-  //   direction: Double,
-  //   promise: Promise
-  // )
-  // abstract fun getPageModeHorizontalPosition(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setPageModeHorizontalPosition(
-  //   id: Double,
-  //   position: Double,
-  //   promise: Promise
-  // )
-  // abstract fun getPageModeVerticalPosition(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setPageModeVerticalPosition(
-  //   id: Double,
-  //   position: Double,
-  //   promise: Promise
-  // )
-  // abstract fun getRecLineSpacing(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setRecLineSpacing(
-  //   id: Double,
-  //   spacing: Double,
-  //   promise: Promise
-  // )
-  // abstract fun getMapMode(
-  //   id: Double,
-  //   promise: Promise
-  // )
-  // abstract fun setMapMode(
-  //   id: Double,
-  //   mode: Double,
-  //   promise: Promise
-  // )
+  abstract fun addListener(eventName: String)
+  abstract fun removeListeners(count: Double)
+  abstract fun connect(printerSeries: Double, lang: Double, target: String, timeout: Double, promise: Promise)
+  abstract fun disconnect(id: Double, promise: Promise)
+  abstract fun getStatus(id: Double, promise: Promise)
+  abstract fun sendData(id: Double, timeout: Double, promise: Promise)
+  abstract fun beginTransaction(id: Double, promise: Promise)
+  abstract fun endTransaction(id: Double, promise: Promise)
+  abstract fun requestPrintJobStatus(id: Double, printJobId: String, promise: Promise)
+  abstract fun clearCommandBuffer(id: Double, promise: Promise)
+  abstract fun addTextAlign(id: Double, align: Double, promise: Promise)
+  abstract fun addLineSpace(id: Double, lineSpace: Double, promise: Promise)
+  abstract fun addTextRotate(id: Double, rotate: Double, promise: Promise)
+  abstract fun addText(id: Double, text: String, promise: Promise)
+  abstract fun addTextLang(id: Double, lang: Double, promise: Promise)
+  abstract fun addTextFont(id: Double, font: Double, promise: Promise)
+  abstract fun addTextSmooth(id: Double, smooth: Double, promise: Promise)
+  abstract fun addTextSize(id: Double, width: Double, height: Double, promise: Promise)
+  abstract fun addTextStyle(id: Double, reverse: Double, ul: Double, em: Double, color: Double, promise: Promise)
+  abstract fun addHPosition(id: Double, x: Double, promise: Promise)
+  abstract fun addFeedUnit(id: Double, unit: Double, promise: Promise)
+  abstract fun addFeedLine(id: Double, line: Double, promise: Promise)
+  abstract fun addImage(id: Double, image: String, x: Double, y: Double, width: Double, height: Double, color: Double, mode: Double, halftone: Double, brightness: Double, compress: Double, promise: Promise)
+  abstract fun addLogo(id: Double, key1: Double, key2: Double, promise: Promise)
+  abstract fun addBarcode(id: Double, barcode: String, type: Double, hri: Double, font: Double, width: Double, height: Double, promise: Promise)
+  abstract fun addSymbol(id: Double, symbol: String, type: Double, level: Double, width: Double, height: Double, size: Double, promise: Promise)
+  abstract fun addHLine(id: Double, x1: Double, x2: Double, lineStyle: Double, promise: Promise)
+  abstract fun addVLineBegin(id: Double, x: Double, lineStyle: Double, promise: Promise)
+  abstract fun addVLineEnd(id: Double, lineId: Double, promise: Promise)
+  abstract fun addPageBegin(id: Double, promise: Promise)
+  abstract fun addPageEnd(id: Double, promise: Promise)
+  abstract fun addPageArea(id: Double, x: Double, y: Double, width: Double, height: Double, promise: Promise)
+  abstract fun addPageDirection(id: Double, direction: Double, promise: Promise)
+  abstract fun addPagePosition(id: Double, x: Double, y: Double, promise: Promise)
+  abstract fun addPageLine(id: Double, x1: Double, y1: Double, x2: Double, y2: Double, lineStyle: Double, promise: Promise)
+  abstract fun addPageRectangle(id: Double, x1: Double, y1: Double, x2: Double, y2: Double, lineStyle: Double, promise: Promise)
+  abstract fun addRotateBegin(id: Double, promise: Promise)
+  abstract fun addRotateEnd(id: Double, promise: Promise)
+  abstract fun addCut(id: Double, type: Double, promise: Promise)
+  abstract fun addPulse(id: Double, drawer: Double, time: Double, promise: Promise)
+  abstract fun addSound(id: Double, pattern: Double, repeat: Double, cycle: Double, promise: Promise)
+  abstract fun addFeedPosition(id: Double, position: Double, promise: Promise)
+  abstract fun addLayout(id: Double, type: Double, width: Double, height: Double, marginTop: Double, marginBottom: Double, offsetCut: Double, offsetLabel: Double, promise: Promise)
+  abstract fun addCommand(id: Double, command: String, promise: Promise)
+  abstract fun getMaintenanceCounter(id: Double, timeout: Double, type: Double, promise: Promise)
+  abstract fun resetMaintenanceCounter(id: Double, timeout: Double, type: Double, promise: Promise)
+  abstract fun getPrinterSetting(id: Double, timeout: Double, type: Double, promise: Promise)
+  abstract fun setPrinterSetting(id: Double, timeout: Double, list: ReadableMap, promise: Promise)
+  abstract fun getPrinterSettingEx(id: Double, timeout: Double, promise: Promise)
+  abstract fun setPrinterSettingEx(id: Double, timeout: Double, jsonString: String, administratorPassword: String, promise: Promise)
+  abstract fun verifyPassword(id: Double, timeout: Double, administratorPassword: String, promise: Promise)
+  abstract fun getPrinterInformation(id: Double, timeout: Double, promise: Promise)
+  abstract fun downloadFirmwareList(id: Double, printerModel: String, option: String, promise: Promise)
+  abstract fun getPrinterFirmwareInfo(id: Double, timeout: Double, promise: Promise)
+  abstract fun verifyUpdate(id: Double, targetFirmwareInfo: ReadableMap, promise: Promise)
+  abstract fun updateFirmware(id: Double, targetFirmwareInfo: ReadableMap, promise: Promise)
+  abstract fun forceRecover(id: Double, timeout: Double, promise: Promise)
+  abstract fun forcePulse(id: Double, drawer: Double, pulseTime: Double, timeout: Double, promise: Promise)
+  abstract fun forceStopSound(id: Double, timeout: Double, promise: Promise)
+  abstract fun forceCommand(id: Double, command: String, timeout: Double, promise: Promise)
+  abstract fun forceReset(id: Double, timeout: Double, promise: Promise)
+  abstract fun discoveryStart(filter: ReadableMap, promise: Promise)
+  abstract fun discoveryStop(promise: Promise)
 }

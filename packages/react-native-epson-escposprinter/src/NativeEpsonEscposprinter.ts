@@ -3,13 +3,12 @@ import {
   type NativeModule,
   type TurboModule,
 } from "react-native";
-import type { PrinterLocale, PrinterSeries } from "./PrinterConst";
 
 export interface Spec extends TurboModule, NativeModule {
   connect(
-    /** @type PrinterSeries */
+    /** @type import("./PrinterConst").PrinterSeries */
     series: number,
-    /** @type PrinterLocale */
+    /** @type import("./PrinterConst").PrinterLocale */
     lang: number,
     target: string,
     timeout: number,
@@ -33,7 +32,11 @@ export interface Spec extends TurboModule, NativeModule {
 
   clearCommandBuffer(id: number): Promise<void>;
 
-  addTextAlign(id: number, align: number): Promise<void>;
+  addTextAlign(
+    id: number,
+    /** @type import("./PrinterConst").PrinterAlign */
+    align: number,
+  ): Promise<void>;
 
   addLineSpace(id: number, linespc: number): Promise<void>;
 

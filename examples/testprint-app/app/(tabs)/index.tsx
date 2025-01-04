@@ -11,70 +11,53 @@ import {
 } from "react-native";
 import {
   connect,
-  ESCPOSConst,
-  searchCitizenPrinter,
-  type CitizenPrinerInfo,
-  type CitizenPrinerWiFiInfo,
+  DeviceInfo,
+  discoverPrinters,
+  PrinterAlign,
+  PrinterCutType,
+  PrinterFont,
+  PrinterLanguage,
+  PrinterLocale,
+  PrinterSeries,
+  PrinterSymbolLevelQrcode,
+  PrinterSymbolTypeQrcode,
 } from "react-native-epson-escposprinter";
 
-const testPrint = async (connectType: number, address?: string) => {
-  const printer = await connect(connectType, address);
-  console.log("✅ connected:", address);
-  await printer.printerCheck();
-  console.log("✅ printerCheck");
-  const printerStatus = await printer.status();
-  await printer.setEncoding("UTF-8");
-  console.log("✅ status", printerStatus);
-  await printer.printText("Hello World!你好世界！\n");
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_2WIDTH | ESCPOSConst.CMP_TXT_2HEIGHT,
-  );
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_3WIDTH | ESCPOSConst.CMP_TXT_3HEIGHT,
-  );
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_4WIDTH | ESCPOSConst.CMP_TXT_4HEIGHT,
-  );
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_5WIDTH | ESCPOSConst.CMP_TXT_5HEIGHT,
-  );
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_6WIDTH | ESCPOSConst.CMP_TXT_6HEIGHT,
-  );
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_7WIDTH | ESCPOSConst.CMP_TXT_7HEIGHT,
-  );
-  await printer.printText(
-    "Hello World!你好世界！\n",
-    ESCPOSConst.CMP_ALIGNMENT_LEFT,
-    ESCPOSConst.CMP_FNT_DEFAULT,
-    ESCPOSConst.CMP_TXT_8WIDTH | ESCPOSConst.CMP_TXT_8HEIGHT,
-  );
-  await printer.printQRCode(
+const testPrint = async (
+  series: PrinterSeries,
+  lang: PrinterLocale,
+  target: string,
+) => {
+  const printer = await connect(series, lang, target);
+  console.log("✅ connected:", target);
+  const info = await printer.getPrinterInformation();
+  console.log("✅ status", info);
+  // await printer.setEncoding("UTF-8");
+  await printer.addTextLang(PrinterLanguage.LANG_MULTI);
+  await printer.addText("Hello World!你好世界！\n");
+  await printer.addTextAlign(PrinterAlign.ALIGN_LEFT);
+  await printer.addTextFont(PrinterFont.FONT_A);
+
+  [
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [7, 8],
+  ].forEach(async ([width, height]) => {
+    await printer.addTextSize(width, height);
+    await printer.addText("Hello World!你好世界！\n");
+  });
+
+  await printer.addSymbol(
     "https://www.google.com",
+    PrinterSymbolTypeQrcode.SYMBOL_QRCODE_MODEL_1,
+    PrinterSymbolLevelQrcode.LEVEL_H,
     8,
-    ESCPOSConst.CMP_QRCODE_EC_LEVEL_H,
   );
   console.log("✅ printText");
-  await printer.cutPaper(ESCPOSConst.CMP_CUT_FULL_PREFEED);
+  await printer.addCut(PrinterCutType.FULL_CUT_FEED);
   console.log("✅ cutPaper");
   await printer.disconnect();
   console.log("✅ disconnect");
@@ -84,7 +67,7 @@ const App: FunctionComponent = () => {
   const isFabric = useNewArchitecture();
   const isHermes = useIsHermes();
 
-  const [answer, setAnswer] = useState<CitizenPrinerInfo[] | null>(null);
+  const [printers, setAnswer] = useState<DeviceInfo[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   return (
@@ -103,7 +86,11 @@ const App: FunctionComponent = () => {
               setLoading(!loading);
 
               try {
-                await testPrint(ESCPOSConst.CMP_PORT_USB);
+                await testPrint(
+                  PrinterSeries.TM_P80,
+                  PrinterLocale.MODEL_CHINESE,
+                  "USB:",
+                );
               } catch (e) {
                 if (e instanceof Error) {
                   console.error(e);
@@ -115,13 +102,13 @@ const App: FunctionComponent = () => {
               setLoading(false);
             }}
           >
-            {loading ? (
-              <ActivityIndicator className="p-4 text-lg color-blue-500" />
-            ) : (
-              <Text className="p-3 color-blue-500 text-lg text-center">
-                Test USB Printer
-              </Text>
-            )}
+            {loading
+              ? <ActivityIndicator className="p-4 text-lg color-blue-500" />
+              : (
+                <Text className="p-3 color-blue-500 text-lg text-center">
+                  Test USB Printer
+                </Text>
+              )}
           </Pressable>
 
           <Pressable
@@ -131,9 +118,12 @@ const App: FunctionComponent = () => {
               setAnswer(null);
 
               try {
-                setAnswer(
-                  await searchCitizenPrinter(ESCPOSConst.CMP_PORT_WiFi),
-                );
+                // [ ] Support array
+                for await (const device of discoverPrinters({})) {
+                  setAnswer((devices) => (devices ?? []).concat(device));
+                  // [ ] Implement timeout before returning
+                  return;
+                }
               } catch (e) {
                 if (e instanceof Error) {
                   console.error(e);
@@ -145,21 +135,17 @@ const App: FunctionComponent = () => {
               }
             }}
           >
-            {loading ? (
-              <ActivityIndicator className="p-4 text-lg color-blue-500" />
-            ) : (
-              <Text className="p-3 color-blue-500 text-lg text-center">
-                Search Wifi Printers
-              </Text>
-            )}
+            {loading
+              ? <ActivityIndicator className="p-4 text-lg color-blue-500" />
+              : (
+                <Text className="p-3 color-blue-500 text-lg text-center">
+                  Search Wifi Printers
+                </Text>
+              )}
           </Pressable>
 
-          {answer
-            ?.filter(
-              (printer): printer is CitizenPrinerWiFiInfo =>
-                !!(printer as any).ipAddress,
-            )
-            .map((printer) => (
+          {printers
+            ?.map((printer) => (
               <Pressable
                 className="bg-gray-200 active:bg-gray-300 active:opacity-50 rounded-xl"
                 key={printer.ipAddress}
@@ -169,8 +155,9 @@ const App: FunctionComponent = () => {
 
                   try {
                     await testPrint(
-                      ESCPOSConst.CMP_PORT_WiFi,
-                      printer.ipAddress,
+                      PrinterSeries.TM_P80, // [ ] Searchable?
+                      PrinterLocale.MODEL_CHINESE,
+                      printer.target,
                     );
                   } catch (e) {
                     if (e instanceof Error) {

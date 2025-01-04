@@ -566,7 +566,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   @ReactMethod
   override fun addImage(
     id: Double,
-    data: String,
+    image: String,
     x: Double,
     y: Double,
     width: Double,
@@ -579,7 +579,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     promise: Promise
   ) {
     coroutineScope.launch {
-      runCatching { Base64.decode(data, Base64.DEFAULT) }
+      runCatching { Base64.decode(image, Base64.DEFAULT) }
         .onFailure { promise.reject(CODE_ERROR, it) }
         .onSuccess { bytes ->
           runCatching {
@@ -626,7 +626,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   @ReactMethod
   override fun addBarcode(
     id: Double,
-    data: String,
+    barcode: String,
     type: Double,
     hri: Double,
     font: Double,
@@ -638,7 +638,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)
           ?.addBarcode(
-            data,
+            barcode,
             type.toInt(),
             hri.toInt(),
             font.toInt(),
@@ -656,7 +656,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   @ReactMethod
   override fun addSymbol(
     id: Double,
-    data: String,
+    symbol: String,
     type: Double,
     level: Double,
     width: Double,
@@ -668,7 +668,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)
           ?.addSymbol(
-            data,
+            symbol,
             type.toInt(),
             level.toInt(),
             width.toInt(),
