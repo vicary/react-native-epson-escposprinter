@@ -1,5 +1,6 @@
 package com.epsonescposprinter
 
+import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.lifecycle.ViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -19,19 +20,21 @@ import com.epson.epos2.printer.PrinterSettingListener
 import com.epson.epos2.printer.PrinterStatusInfo
 import com.epson.epos2.printer.ReceiveListener
 import com.epson.epos2.printer.SetPrinterSettingExListener
-import com.epson.epos2.printer.StatusChangeEventListener
+import com.epson.epos2.printer.StatusChangeListener
+import com.epson.epos2.printer.VerifyPasswordListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.JavaScriptModule
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -111,7 +114,10 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       }
 
     private fun jsonToObject(json: String): WritableMap {
-      fun objToMap(obj: JSONObject): WritableMap {
+      lateinit var objToMap: (JSONObject) -> WritableMap
+      lateinit var arrToMap: (JSONArray) -> WritableArray
+
+      objToMap = { obj ->
         Arguments.createMap().apply {
           obj.keys().forEach {
             when (val value = obj.get(it)) {
@@ -121,16 +127,16 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
               is String -> putString(it, value)
               is JSONObject -> putMap(it, objToMap(value))
               is JSONArray -> putArray(it, arrToMap(value))
-              // else -> putNull(it)
+              else -> {}
             }
           }
         }
       }
 
-      fun arrToMap(arr: JSONArray): WritableArray {
+      arrToMap = { arr ->
         Arguments.createArray().apply {
-          arr.map {
-            when (it) {
+          for (i in 0 until arr.length()) {
+            when (val it = arr.get(i)) {
               is Boolean -> pushBoolean(it)
               is Int -> pushInt(it)
               is Double -> pushDouble(it)
@@ -143,7 +149,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         }
       }
 
-      JSONObject(json).apply(::objToMap)
+      return JSONObject(json).let { objToMap(it) }
     }
   }
 
@@ -158,33 +164,34 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       ?.getCurrentFocus()
       ?.let { ViewTreeLifecycleOwner.get(it) }
       ?.lifecycleScope
-      ?: GlobalScope
+      // [ ] Test concurrency, fallback to GlobalScope on racing conditions
+      ?: CoroutineScope(Dispatchers.Default)
 
-  protected fun getPrinter(id: Double, promise: Promise): ESCPOSPrinter? =
+  protected fun getPrinter(id: Double, promise: Promise): Printer? =
     printers.get(id.toInt())
       ?: run {
         promise.reject(
           CODE_ERROR,
-          ESCPOSConst.CMP_EX_DEV_NO_PRINTER.toString()
+          Epos2Exception.ERR_NOT_FOUND.toString()
         )
         null
       }
 
-  private var listenersCount = 0
-
   private fun emitEvent(event: String, parameters: WritableMap) =
     context.takeIf { listenersCount > 0}
-      ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-      .emit(event, parameters)
+    ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+    ?.emit(event, parameters)
+
+  private var listenersCount = 0
 
   @ReactMethod
-  fun addListener(eventName: String) {
+  override fun addListener(eventName: String) {
     listenersCount += 1
   }
 
   @ReactMethod
-  fun removeListeners(count: Int) {
-    listenersCount = (listenersCount - count).coerceAtLeast(0)
+  override fun removeListeners(count: Double) {
+    listenersCount = (listenersCount - count.toInt()).coerceAtLeast(0)
   }
 
   @ReactMethod
@@ -196,7 +203,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     promise: Promise
   ) {
     runCatching {
-      Printer(series, lang, context).apply {
+      Printer(printerSeries.toInt(), lang.toInt(), context).apply {
         connect(
           target,
           timeout.takeIf { it > 0 }?.toInt()
@@ -204,14 +211,20 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         )
       }
     }
-      .onFailure { it: Epos2Exception ->
-        promise.reject(CODE_ERROR, it.getErrorStatus())
+      .onFailure {
+        promise.reject(
+          CODE_ERROR,
+          if (it is Epos2Exception)
+            it.getErrorStatus().toString()
+          else
+            it.message
+        )
       }
       .onSuccess {
         val printerId = printersId.incrementAndGet()
 
         it.setStatusChangeEventListener(
-          object : StatusChangeEventListener {
+          object : StatusChangeListener {
             override fun onPtrStatusChange(
               printer: Printer,
               event: Int
@@ -266,8 +279,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           disconnect()
         }
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess {
           printers.remove(id.toInt())
@@ -344,8 +363,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           }
         }
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(it) }
     }
@@ -357,8 +382,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.apply { sendData(timeout.toInt()) }
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -368,8 +399,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun beginTransaction(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.beginTransaction() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -379,8 +416,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun endTransaction(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.endTransaction() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -396,8 +439,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.apply { requestPrintJobStatus(printJobId) }
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -407,8 +456,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun clearCommandBuffer(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.clearCommandBuffer() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -418,8 +473,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addTextAlign(id: Double, align: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addTextAlign(align.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -429,8 +490,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addLineSpace(id: Double, lineSpace: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addLineSpace(lineSpace.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -440,8 +507,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addTextRotate(id: Double, rotate: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addTextRotate(rotate.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -451,8 +524,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addText(id: Double, text: String, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addText(text) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -462,8 +541,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addTextLang(id: Double, lang: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addTextLang(lang.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -473,8 +558,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addTextFont(id: Double, font: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addTextFont(font.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -484,8 +575,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addTextSmooth(id: Double, smooth: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addTextSmooth(smooth.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -502,8 +599,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addTextSize(width.toInt(), height.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -523,41 +626,65 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         getPrinter(id, promise)
           ?.addTextStyle(reverse.toInt(), ul.toInt(), em.toInt(), color.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
   }
 
   @ReactMethod
-  override fun addHPosition(id: Double, x: Double) {
+  override fun addHPosition(id: Double, x: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addHPosition(x.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
   }
 
   @ReactMethod
-  override fun addFeedUnit(id: Double, unit: Double) {
+  override fun addFeedUnit(id: Double, unit: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addFeedUnit(unit.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
   }
 
   @ReactMethod
-  override fun addFeedLine(id: Double, line: Double) {
+  override fun addFeedLine(id: Double, line: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addFeedLine(line.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -570,7 +697,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     x: Double,
     y: Double,
     width: Double,
-    heigh: Double,
+    height: Double,
     color: Double,
     mode: Double,
     halftone: Double,
@@ -579,26 +706,37 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     promise: Promise
   ) {
     coroutineScope.launch {
-      runCatching { Base64.decode(image, Base64.DEFAULT) }
+      runCatching {
+        val bytes = Base64.decode(image, Base64.DEFAULT)
+
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+          ?: throw IllegalArgumentException("Invalid image data")
+      }
         .onFailure { promise.reject(CODE_ERROR, it) }
-        .onSuccess { bytes ->
+        .onSuccess { image ->
           runCatching {
             getPrinter(id, promise)
               ?.addImage(
-                bytes,
+                image,
                 x.toInt(),
                 y.toInt(),
                 width.toInt(),
-                heigh.toInt(),
+                height.toInt(),
                 color.toInt(),
                 mode.toInt(),
                 halftone.toInt(),
-                brightness.toInt(),
+                brightness,
                 compress.toInt()
               )
           }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
+          .onFailure {
+            promise.reject(
+              CODE_ERROR,
+              if (it is Epos2Exception)
+                it.getErrorStatus().toString()
+              else
+                it.message
+            )
           }
           .onSuccess { promise.resolve(null) }
         }
@@ -616,8 +754,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addLogo(key1.toInt(), key2.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -646,8 +790,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             height.toInt()
           )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -676,8 +826,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             size.toInt()
           )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -699,8 +855,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           lineStyle.toInt()
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -719,19 +881,31 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addVLineBegin(x.toInt(), lineStyle.toInt(), lineId)
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(lineId[0]) }
     }
   }
 
   @ReactMethod
-  override fun addVLineEnd(id: Double, lineId: Double) {
+  override fun addVLineEnd(id: Double, lineId: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addVLineEnd(lineId.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -741,8 +915,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addPageBegin(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addPageBegin() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -752,8 +932,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addPageEnd(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addPageEnd() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -777,8 +963,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           height.toInt()
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -794,8 +986,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addPageDirection(direction.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -812,8 +1010,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addPagePosition(x.toInt(), y.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -840,8 +1044,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             lineStyle.toInt()
           )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -868,8 +1078,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             lineStyle.toInt()
           )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -879,8 +1095,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addRotateBegin(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addRotateBegin() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -890,8 +1112,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun addRotateEnd(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addRotateEnd() }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -905,8 +1133,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   ) {
     coroutineScope.launch {
       runCatching { getPrinter(id, promise)?.addCut(type.toInt()) }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -923,8 +1157,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addPulse(drawer.toInt(), time.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -946,8 +1186,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           cycle.toInt()
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -963,8 +1209,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.addFeedPosition(position.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -978,7 +1230,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     height: Double,
     marginTop: Double,
     marginBottom: Double,
-    offsetCut: Double
+    offsetCut: Double,
     offsetLabel: Double,
     promise: Promise
   ) {
@@ -994,8 +1246,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           offsetLabel.toInt()
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -1016,8 +1274,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           runCatching {
             getPrinter(id, promise)?.addCommand(bytes)
           }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
+          .onFailure {
+            promise.reject(
+              CODE_ERROR,
+              if (it is Epos2Exception)
+                it.getErrorStatus().toString()
+              else
+                it.message
+            )
           }
           .onSuccess { promise.resolve(null) }
         }
@@ -1046,11 +1310,22 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
                 ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
                 ?: promise.resolve(value)
             }
+
+            override fun onResetMaintenanceCounter(
+              code: Int,
+              type: Int
+            ) {}
           }
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
     }
   }
@@ -1068,6 +1343,12 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           timeout.toInt(),
           type.toInt(),
           object : MaintenanceCounterListener {
+            override fun onGetMaintenanceCounter(
+              code: Int,
+              type: Int,
+              value: Int
+            ) {}
+
             override fun onResetMaintenanceCounter(code: Int, type: Int) {
               code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
                 ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
@@ -1076,8 +1357,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           }
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
     }
   }
@@ -1104,11 +1391,19 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
                 ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
                 ?: promise.resolve(value)
             }
+
+            override fun onSetPrinterSetting(code: Int) {}
           }
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
     }
   }
@@ -1124,8 +1419,27 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.setPrinterSetting(
           timeout.toInt(),
-          list.map { it.key.toInt() to it.value.toInt() }.toMap(),
+          list.let { list ->
+            val result = mutableMapOf<Int, Int>()
+            val iterator = list.keySetIterator()
+
+            while (iterator.hasNextKey()) {
+              val key = iterator.nextKey()
+
+              key.toIntOrNull()?.let { it ->
+                result[it] = list.getInt(key)
+              }
+            }
+
+            result
+          },
           object : PrinterSettingListener {
+            override fun onGetPrinterSetting(
+              code: Int,
+              type: Int,
+              value: Int
+            ) {}
+
             override fun onSetPrinterSetting(code: Int) {
               code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
                 ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
@@ -1134,8 +1448,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           }
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
     }
   }
@@ -1168,8 +1488,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             getPrinterSettingEx(timeout.toInt())
           }
         }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
+          .onFailure {
+            promise.reject(
+              CODE_ERROR,
+              if (it is Epos2Exception)
+                it.getErrorStatus().toString()
+              else
+                it.message
+            )
           }
       }
     }
@@ -1204,8 +1530,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             setPrinterSettingEx(timeout.toInt(), jsonString, administratorPassword)
           }
         }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
+          .onFailure {
+            promise.reject(
+              CODE_ERROR,
+              if (it is Epos2Exception)
+                it.getErrorStatus().toString()
+              else
+                it.message
+            )
           }
       }
     }
@@ -1240,8 +1572,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             verifyPassword(timeout.toInt(), administratorPassword)
           }
         }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
+          .onFailure {
+            promise.reject(
+              CODE_ERROR,
+              if (it is Epos2Exception)
+                it.getErrorStatus().toString()
+              else
+                it.message
+            )
           }
       }
     }
@@ -1254,29 +1592,32 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     promise: Promise
   ) {
     coroutineScope.launch {
-      mutex.withLock {
-        runCatching {
-          getPrinter(id, promise)?.apply {
-            setGetPrinterInformationListener(
-              object : PrinterInformationListener {
-                override fun onGetPrinterInformation(
-                  code: Int,
-                  json: String
-                ) {
-                  code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
-                    ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
-                    ?: promise.resolve(jsonToObject(json))
-                }
+      runCatching {
+        getPrinter(id, promise)?.apply {
+          getPrinterInformation(
+            timeout.toInt(),
+            object : PrinterInformationListener {
+              override fun onGetPrinterInformation(
+                code: Int,
+                json: String
+              ) {
+                code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
+                  ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
+                  ?: promise.resolve(jsonToObject(json))
               }
-            )
-
-            getPrinterInformation(timeout.toInt())
-          }
+            }
+          )
         }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
-          }
       }
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
+        }
     }
   }
 
@@ -1294,15 +1635,16 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
             printerModel,
             option,
             object : FirmwareUpdateListener {
-              override fun onDownloadFirmwareList(
-                code: Int,
-                firmwareList: FirmwareInfo[]
-              ) {
+              override fun onReceiveFirmwareInformation(it: FirmwareInfo) {}
+              override fun onUpdateFirmware(code: Int, maxWaitTime: Int) {}
+              override fun onFirmwareUpdateProgress(task: String, progress: Float) {}
+              override fun onUpdateVerify(code: Int) {}
+              override fun onDownloadFirmwareList(code: Int, list: Array<FirmwareInfo>) {
                 code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
                   ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
                   ?: promise.resolve(
                     Arguments.createArray().apply {
-                      firmwareList.forEach {
+                      list.forEach {
                         pushMap(
                           Arguments.createMap().apply {
                             putString("model", it.model)
@@ -1317,8 +1659,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           )
         }
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
     }
   }
@@ -1335,24 +1683,30 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           getPrinterFirmwareInfo(
             timeout.toInt(),
             object : FirmwareUpdateListener {
-              override fun onReceiveFirmwareInformation(
-                firmwareInfo: FirmwareInfo
-              ) {
-                code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
-                  ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
-                  ?: promise.resolve(
-                    Arguments.createMap().apply {
-                      putString("model", firmwareInfo.model)
-                      putString("version", firmwareInfo.version)
-                    }
-                  )
+              override fun onDownloadFirmwareList(code: Int, list: Array<FirmwareInfo>) {}
+              override fun onUpdateFirmware(code: Int, maxWaitTime: Int) {}
+              override fun onFirmwareUpdateProgress(task: String, progress: Float) {}
+              override fun onUpdateVerify(code: Int) {}
+              override fun onReceiveFirmwareInformation(it: FirmwareInfo) {
+                promise.resolve(
+                  Arguments.createMap().apply {
+                    putString("model", it.model)
+                    putString("version", it.version)
+                  }
+                )
               }
             }
           )
         }
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
     }
   }
@@ -1363,31 +1717,45 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     targetFirmwareInfo: ReadableMap,
     promise: Promise
   ) {
-    coroutineScope.launch {
-      runCatching {
-        getPrinter(id, promise)?.apply {
-          verifyUpdate(
-            object : FirmwareInfo {
-              override val model: String = targetFirmwareInfo.getString("model")
-              override val version: String = targetFirmwareInfo.getString("version")
-            },
-            object : FirmwareUpdateListener {
-              override fun onVerifyUpdate(
-                code: Int,
-                result: Int
-              ) {
-                code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
-                  ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
-                  ?: promise.resolve(result)
-              }
-            }
-          )
-        }
-      }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
-        }
-    }
+    promise.reject(
+      CODE_ERROR,
+      "Not implemented because constructor of FirmwareInfo is protected."
+    )
+    // coroutineScope.launch {
+    //   runCatching {
+    //     getPrinter(id, promise)?.apply {
+    //       verifyUpdate(
+    //         targetFirmwareInfo.let {
+    //           FirmwareInfo(
+    //             it.getString("model"),
+    //             it.getString("version"),
+    //             it.getString("requestModel")
+    //           )
+    //         },
+    //         object : FirmwareUpdateListener {
+    //           override fun onReceiveFirmwareInformation(it: FirmwareInfo) {}
+    //           override fun onDownloadFirmwareList(code: Int, list: Array<FirmwareInfo>) {}
+    //           override fun onUpdateFirmware(code: Int, maxWaitTime: Int) {}
+    //           override fun onFirmwareUpdateProgress(task: String, progress: Float) {}
+    //           override fun onUpdateVerify(code: Int) {
+    //             code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
+    //               ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
+    //               ?: promise.resolve(null)
+    //           }
+    //         }
+    //       )
+    //     }
+    //   }
+    //     .onFailure {
+    //       promise.reject(
+    //         CODE_ERROR,
+    //         if (it is Epos2Exception)
+    //           it.getErrorStatus().toString()
+    //         else
+    //           it.message
+    //       )
+    //     }
+    // }
   }
 
   @ReactMethod
@@ -1396,45 +1764,60 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     targetFirmwareInfo: ReadableMap,
     promise: Promise
   ) {
-    coroutineScope.launch {
-      runCatching {
-        getPrinter(id, promise)?.apply {
-          updateFirmware(
-            object : FirmwareInfo {
-              override val model: String = targetFirmwareInfo.getString("model")
-              override val version: String = targetFirmwareInfo.getString("version")
-            },
-            object : FirmwareUpdateListener {
-              override fun onFirmwareUpdateProgress(
-                task: String,
-                progress: Float
-              ) {
-                emitEvent(
-                  "updateProgress",
-                  Arguments.createMap().apply {
-                    putString("task", task)
-                    putDouble("progress", progress.toDouble())
-                  }
-                )
-              }
-
-              override fun onUpdateFirmware(
-                code: Int,
-                maxWaitTime: Int
-              ) {
-                code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
-                  ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
-                  ?: promise.resolve(maxWaitTime)
-              }
-            },
-            context
-          )
-        }
-      }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
-        }
-    }
+    promise.reject(
+      CODE_ERROR,
+      "Not implemented because constructor of FirmwareInfo is protected."
+    )
+    // coroutineScope.launch {
+    //   runCatching {
+    //     getPrinter(id, promise)?.apply {
+    //       updateFirmware(
+    //         targetFirmwareInfo.let {
+    //           FirmwareInfo(
+    //             it.getString("model"),
+    //             it.getString("version"),
+    //             it.getString("requestModel")
+    //           )
+    //         },
+    //         object : FirmwareUpdateListener {
+    //           override fun onReceiveFirmwareInformation(it: FirmwareInfo) {}
+    //           override fun onDownloadFirmwareList(code: Int, list: Array<FirmwareInfo>) {}
+    //           override fun onUpdateVerify(code: Int) {}
+    //           override fun onFirmwareUpdateProgress(
+    //             task: String,
+    //             progress: Float
+    //           ) {
+    //             emitEvent(
+    //               "updateProgress",
+    //               Arguments.createMap().apply {
+    //                 putString("task", task)
+    //                 putDouble("progress", progress.toDouble())
+    //               }
+    //             )
+    //           }
+    //           override fun onUpdateFirmware(
+    //             code: Int,
+    //             maxWaitTime: Int
+    //           ) {
+    //             code.takeIf { it != Epos2CallbackCode.CODE_SUCCESS }
+    //               ?.let { promise.reject(CODE_CALLBACK, it.toString()) }
+    //               ?: promise.resolve(maxWaitTime)
+    //           }
+    //         },
+    //         context
+    //       )
+    //     }
+    //   }
+    //     .onFailure {
+    //       promise.reject(
+    //         CODE_ERROR,
+    //         if (it is Epos2Exception)
+    //           it.getErrorStatus().toString()
+    //         else
+    //           it.message
+    //       )
+    //     }
+    // }
   }
 
   @ReactMethod
@@ -1447,8 +1830,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.forceRecover(timeout.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -1470,8 +1859,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           timeout.toInt()
         )
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -1487,8 +1882,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.forceStopSound(timeout.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -1499,6 +1900,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     id: Double,
     command: String,
     timeout: Double,
+    promise: Promise
   ) {
     coroutineScope.launch {
       runCatching {
@@ -1509,8 +1911,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           runCatching {
             getPrinter(id, promise)?.forceCommand(bytes, timeout.toInt())
           }
-          .onFailure { it: Epos2Exception ->
-            promise.reject(CODE_ERROR, it.getErrorStatus())
+          .onFailure {
+            promise.reject(
+              CODE_ERROR,
+              if (it is Epos2Exception)
+                it.getErrorStatus().toString()
+              else
+                it.message
+            )
           }
           .onSuccess { promise.resolve(null) }
         }
@@ -1527,8 +1935,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       runCatching {
         getPrinter(id, promise)?.forceReset(timeout.toInt())
       }
-        .onFailure { it: Epos2Exception ->
-          promise.reject(CODE_ERROR, it.getErrorStatus())
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
         }
         .onSuccess { promise.resolve(null) }
     }
@@ -1539,18 +1953,18 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     runCatching {
       Discovery.start(
         context,
-        new FilterOption().apply {
-          filter.getInt("portType")?.let { setPortType(it) }
+        FilterOption().apply {
+          filter.getInt("portType").let { setPortType(it) }
           filter.getString("broadcast")?.let { setBroadcast(it) }
-          filter.getInt("deviceModel")?.let { setDeviceModel(it) }
-          filter.getInt("epsonFilter")?.let { setEpsonFilter(it) }
-          filter.getInt("deviceType")?.let { setDeviceType(it) }
-          filter.getBoolean("bondedDevices")?.let {
+          filter.getInt("deviceModel").let { setDeviceModel(it) }
+          filter.getInt("epsonFilter").let { setEpsonFilter(it) }
+          filter.getInt("deviceType").let { setDeviceType(it) }
+          filter.getBoolean("bondedDevices").let {
             setBondedDevices(
               if (it) Discovery.TRUE else Discovery.FALSE
             )
           }
-          filter.getBoolean("usbDeviceName")?.let {
+          filter.getBoolean("usbDeviceName").let {
             setUsbDeviceName(
               if (it) Discovery.TRUE else Discovery.FALSE
             )
@@ -1579,8 +1993,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         }
       )
     }
-      .onFailure { it: Epos2Exception ->
-        promise.reject(CODE_ERROR, it.getErrorStatus())
+      .onFailure {
+        promise.reject(
+          CODE_ERROR,
+          if (it is Epos2Exception)
+            it.getErrorStatus().toString()
+          else
+            it.message
+        )
       }
       .onSuccess { promise.resolve(null) }
   }
@@ -1588,8 +2008,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   @ReactMethod
   override fun discoveryStop(promise: Promise) {
     runCatching { Discovery.stop() }
-      .onFailure { it: Epos2Exception ->
-        promise.reject(CODE_ERROR, it.getErrorStatus())
+      .onFailure {
+        promise.reject(
+          CODE_ERROR,
+          if (it is Epos2Exception)
+            it.getErrorStatus().toString()
+          else
+            it.message
+        )
       }
       .onSuccess { promise.resolve(null) }
   }

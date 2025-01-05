@@ -1,4 +1,4 @@
-import { EventEmitter } from "events";
+import { EventEmitter } from "eventemitter3";
 import { NativeEventEmitter } from "react-native";
 import {
   getCallbackError,
@@ -98,14 +98,14 @@ export async function connect(
   series: PrinterSeries,
   lang: PrinterLocale,
   target: string,
-  timeout: number = 0,
+  timeout?: number,
 ): Promise<Printer> {
   try {
     const printerId = await NativeInterface.connect(
       series,
       lang,
       target,
-      timeout,
+      timeout ?? Printer.PARAM_DEFAULT,
     );
 
     return new Printer(printerId);
@@ -216,30 +216,6 @@ class Printer extends CommonPrinter implements AsyncDisposable {
     }
   }
 
-  /**
-   * Enables printer status event notification.
-   *
-   * Acquires and updates the printer status at the `interval` specified with the
-   * interval property and notifies it of the listener method registered by
-   * `setStatusChangeEventListener`.
-   */
-  async startMonitor() {
-    try {
-      return await NativeInterface.startMonitor(this.#id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
-  /** Disables status events. */
-  async stopMonitor() {
-    try {
-      return await NativeInterface.stopMonitor(this.#id);
-    } catch (error) {
-      return handleRejection(error);
-    }
-  }
-
   /** Acquires the current status information. */
   async getStatus() {
     try {
@@ -259,9 +235,12 @@ class Printer extends CommonPrinter implements AsyncDisposable {
    *
    * This API sends data buffered by an add-type API (e.g., `addText`).
    */
-  async sendData(timeout: number = 0) {
+  async sendData(timeout?: number) {
     try {
-      return await NativeInterface.sendData(this.#id, timeout);
+      return await NativeInterface.sendData(
+        this.#id,
+        timeout ?? Printer.PARAM_DEFAULT,
+      );
     } catch (error) {
       return handleRejection(error);
     }
@@ -1451,16 +1430,14 @@ class Printer extends CommonPrinter implements AsyncDisposable {
    * in the listener parameter.
    */
   async setPrinterSetting(
-    type: PrinterSettingType,
-    value: PrinterSettingValue,
+    settings: Record<PrinterSettingType, PrinterSettingValue>,
     timeout?: number,
   ) {
     try {
       return await NativeInterface.setPrinterSetting(
         this.#id,
         timeout ?? Printer.PARAM_DEFAULT,
-        type,
-        value,
+        settings,
       );
     } catch (error) {
       return handleRejection(error);

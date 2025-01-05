@@ -20,13 +20,23 @@ the Epson SDK archive.
 ```tsx
 import {
   connect,
-  ESCPOSConst,
-  searchEpsonPrinters,
+  discoverPrinters,
+  getPrinterSeriesFromDeviceName,
+  PrinterLocale,
 } from "react-native-epson-escposprinter";
+import { ok } from "assert";
 
-const main = async () => {
-  // TODO:
-};
+for await (const info of discoverPrinters()) {
+  const series = getPrinterSeriesFromDeviceName(info.deviceName);
+  ok(series, `Unknown device ${info.deviceName}`);
+
+  const printer = await connect(series, PrinterLocale.MODEL_ANK, info.target);
+
+  await printer.transaction(async () => {
+    await printer.addText("ABC");
+    await printer.sendData();
+  });
+}
 ```
 
 ## Contributing
@@ -40,11 +50,12 @@ support.
 
 ## TODO
 
-1. [x] Rename citizen to epson
-   1. [x] Android
-   2. [x] iOS
-2. [ ] Implement SDK methods
-   1. [ ] TypeScript
-   2. [ ] Android
+1. Rename citizen to epson
+   1. [x] TypeScript
+   2. [x] Android
+   3. [x] iOS
+2. Implement SDK methods
+   1. [x] TypeScript
+   2. [x] Android
    3. [ ] iOS
       1. [ ] XCode Project reconfiguration, included libraries... etc.

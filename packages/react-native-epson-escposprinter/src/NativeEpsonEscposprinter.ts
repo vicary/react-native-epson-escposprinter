@@ -1,10 +1,18 @@
-import {
-  TurboModuleRegistry,
-  type NativeModule,
-  type TurboModule,
-} from "react-native";
+/* eslint-disable @typescript-eslint/ban-types */
 
-export interface Spec extends TurboModule, NativeModule {
+import { TurboModuleRegistry, type TurboModule } from "react-native";
+import type {
+  PrinterFirmwareInfomation,
+  PrinterInformation,
+  PrinterSettings,
+  PrinterStatus,
+} from "./PrinterConst";
+
+export interface Spec extends TurboModule {
+  addListener: (eventType: string) => void;
+
+  removeListeners: (count: number) => void;
+
   connect(
     /** @type import("./PrinterConst").PrinterSeries */
     series: number,
@@ -16,11 +24,7 @@ export interface Spec extends TurboModule, NativeModule {
 
   disconnect(id: number): Promise<void>;
 
-  startMonitor(id: number): Promise<void>;
-
-  stopMonitor(id: number): Promise<void>;
-
-  getStatus(id: number): Promise<object>;
+  getStatus(id: number): Promise<PrinterStatus>;
 
   sendData(id: number, timeout: number): Promise<void>;
 
@@ -191,14 +195,9 @@ export interface Spec extends TurboModule, NativeModule {
 
   getPrinterSetting(id: number, timeout: number, type: number): Promise<number>;
 
-  setPrinterSetting(
-    id: number,
-    timeout: number,
-    type: number,
-    value: number,
-  ): Promise<void>;
+  setPrinterSetting(id: number, timeout: number, list: Object): Promise<void>;
 
-  getPrinterSettingEx(id: number, timeout: number): Promise<object>;
+  getPrinterSettingEx(id: number, timeout: number): Promise<PrinterSettings>;
 
   setPrinterSettingEx(
     id: number,
@@ -213,7 +212,10 @@ export interface Spec extends TurboModule, NativeModule {
     administratorPassword: string,
   ): Promise<number>;
 
-  getPrinterInformation(id: number, timeout: number): Promise<object>;
+  getPrinterInformation(
+    id: number,
+    timeout: number,
+  ): Promise<PrinterInformation>;
 
   downloadFirmwareList(
     id: number,
@@ -221,11 +223,14 @@ export interface Spec extends TurboModule, NativeModule {
     option: string,
   ): Promise<object[]>;
 
-  getPrinterFirmwareInfo(id: number, timeout: number): Promise<object>;
+  getPrinterFirmwareInfo(
+    id: number,
+    timeout: number,
+  ): Promise<PrinterFirmwareInfomation>;
 
-  verifyUpdate(id: number, targetFirmwareInfo: string): Promise<number>;
+  verifyUpdate(id: number, targetFirmwareInfo: Object): Promise<number>;
 
-  updateFirmware(id: number, targetFirmwareInfo: string): Promise<number>;
+  updateFirmware(id: number, targetFirmwareInfo: Object): Promise<number>;
 
   forceRecover(id: number, timeout: number): Promise<void>;
 
@@ -242,7 +247,7 @@ export interface Spec extends TurboModule, NativeModule {
 
   forceReset(id: number, timeout: number): Promise<void>;
 
-  discoveryStart(filter: object): Promise<void>;
+  discoveryStart(filter: Object): Promise<void>;
 
   discoveryStop(): Promise<void>;
 }
