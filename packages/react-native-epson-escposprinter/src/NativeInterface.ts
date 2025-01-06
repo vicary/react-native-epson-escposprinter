@@ -1,11 +1,17 @@
-import { NativeModules, Platform } from "react-native";
+import {
+  DeviceEventEmitter,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+} from "react-native";
 import type { Spec } from "./NativeEpsonEscposprinter";
 
 // @ts-expect-error ts(7017)
 const isTurboModuleEnabled = global.__turboModuleProxy != null;
+
 const NativeInterface: Spec = isTurboModuleEnabled
-  ? // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require("./NativeEpsonEscposprinter").default
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ? require("./NativeEpsonEscposprinter").default
   : NativeModules.EpsonEscposprinter;
 
 if (!NativeInterface) {
@@ -17,4 +23,8 @@ if (!NativeInterface) {
   );
 }
 
-export { NativeInterface };
+const events = isTurboModuleEnabled
+  ? new NativeEventEmitter(NativeInterface)
+  : DeviceEventEmitter;
+
+export { events, NativeInterface };

@@ -52,23 +52,28 @@ const Home: FunctionComponent = () => {
         contentInsetAdjustmentBehavior="automatic"
         className="min-h-screen"
       >
-        <View className="px-3 py-10 h-full flex gap-5">
-          <Text className="font-family: font-mono">
-            Fabric: {isFabric ? "✅" : "❎"}
-          </Text>{" "}
-          <Text className="font-family: font-mono">
-            Hermes: {isHermes ? "✅" : "❎"}
-          </Text>
+        <View className="px-3 py-10 h-full flex gap-3">
+          <Text className="text-2xl font-bold">TestPrint</Text>
 
-          {Object.entries(availablePrinters).map(([key, value]) => (
-            <Link key={key} href={`/${key}`} asChild>
-              <Pressable className="bg-gray-200 active:bg-gray-300 active:opacity-50 rounded-xl">
-                <Text className="p-3 color-blue-500 text-lg text-center">
-                  {value}
-                </Text>
-              </Pressable>
-            </Link>
-          ))}
+          <View>
+            <Text className="text-xl">Environment</Text>
+            <View className="flex flex-row gap-3">
+              <Text>Fabric: {isFabric ? "✅" : "❎"}</Text>
+              <Text>Hermes: {isHermes ? "✅" : "❎"}</Text>
+            </View>
+          </View>
+
+          <View className="flex flex-row flex-wrap gap-3">
+            {Object.entries(availablePrinters).map(([key, value]) => (
+              <Link key={key} href={`/${key}`} asChild>
+                <Pressable className="bg-gray-200 active:bg-gray-300 active:opacity-50 rounded-xl w-32">
+                  <Text className="p-3 color-blue-500 text-lg text-center">
+                    {value}
+                  </Text>
+                </Pressable>
+              </Link>
+            ))}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

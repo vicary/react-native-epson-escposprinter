@@ -1,5 +1,10 @@
-import { NativeEventEmitter } from "react-native";
-import { NativeInterface } from "./NativeInterface";
+import type { EmitterSubscription } from "react-native";
+import {
+  createDeferredIterable,
+  type DeferredIterableIterator,
+} from "./deferred-iterable";
+import { ErrorCode, getEpsonError } from "./errors";
+import { events, NativeInterface } from "./NativeInterface";
 import { PrinterSeries } from "./PrinterConst";
 
 export const enum DeviceType {
@@ -44,6 +49,10 @@ export type FilterOptions = {
   usbDeviceName?: boolean;
 };
 
+export type DiscoveryOptions = {
+  verbose?: boolean;
+};
+
 export type DeviceInfo = {
   deviceType: DeviceType;
   deviceName: string;
@@ -52,15 +61,6 @@ export type DeviceInfo = {
   macAddress?: string;
   bdAddress?: string;
 };
-
-let active = false;
-const globalQueue = new Set<DeviceInfo>();
-const events = new NativeEventEmitter(NativeInterface);
-
-events.addListener(
-  "deviceFound",
-  (deviceInfo: DeviceInfo) => globalQueue.add(deviceInfo),
-);
 
 export const getPrinterSeriesFromDeviceName = (
   name: string,
@@ -178,41 +178,96 @@ export const getPrinterSeriesFromDeviceName = (
   }
 };
 
-export async function* discoverPrinters(filter: FilterOptions = {}) {
-  const hasLock = !active;
-  const localQueue: DeviceInfo[] = [];
-  const subscription = events.addListener(
-    "deviceFound",
-    (deviceInfo: DeviceInfo) => localQueue.push(deviceInfo),
-  );
+/**
+ * A cache of discovered devices.
+ *
+ * Useful when multiple subscribers are active at the same time, we can only
+ * have one active discovery service so we cache and share the result across
+ * all subscribers.
+ */
+const cache = new Map<string, DeviceInfo>();
+
+/**
+ * References to active subscribers for sharing the cache.
+ */
+const iterators = new Set<DeferredIterableIterator<DeviceInfo>>();
+
+/**
+ * Epson's Discovery service requires a manual cooldown after stopping.
+ */
+let cooldown: Promise<void> | null = null;
+
+let listener: EmitterSubscription | null = null;
+
+export async function discoverPrinters(
+  filter: FilterOptions = {},
+  options?: DiscoveryOptions,
+) {
+  const hasLock = listener === null;
+
+  const iterator = createDeferredIterable<DeviceInfo>({
+    dispose: async () => {
+      iterators.delete(iterator);
+
+      try {
+        if (hasLock) {
+          if (options?.verbose) {
+            console.debug(`Stopping discovery service...`);
+          }
+
+          listener?.remove();
+          listener = null;
+
+          cooldown = NativeInterface.discoveryStop()
+            .then(() => new Promise<void>((r) => setTimeout(r, 100)))
+            .then(() => {
+              cache.clear();
+              cooldown = null;
+            });
+        }
+      } catch (error) {
+        throw getEpsonError(error) ?? error;
+      }
+    },
+  });
 
   try {
     if (hasLock) {
-      active = true;
+      listener?.remove(); // HMR may cause multiple subscriptions?
+      listener = events.addListener(
+        "deviceFound",
+        (info: DeviceInfo) => {
+          for (const it of iterators) {
+            it.push(info);
+          }
+
+          cache.set(info.target, info);
+        },
+      );
+
+      // Let previous stop action to finsih before starting a new one.
+      await cooldown;
+
+      if (options?.verbose) {
+        console.debug(`Starting discovery service...`);
+      }
 
       await NativeInterface.discoveryStart(filter);
     }
-
-    yield* globalQueue;
-
-    while (true) {
-      const deviceInfo = localQueue.shift();
-
-      if (deviceInfo !== undefined && !globalQueue.has(deviceInfo)) {
-        yield deviceInfo;
-      }
-
-      await new Promise((r) => setTimeout(r, 300));
-    }
-  } finally {
-    subscription.remove();
-
-    if (hasLock) {
-      await NativeInterface.discoveryStop();
-
-      globalQueue.clear();
-
-      active = false;
-    }
+  } catch (error) {
+    throw getEpsonError(error, {
+      [ErrorCode.ERR_ILLEGAL]:
+        `- Tried to start search when search had been already done.
+- Bluetooth is OFF.
+- There is no permission for the position information.`,
+    }) ?? error;
   }
+
+  for (const value of cache.values()) {
+    iterator.push(value);
+  }
+
+  iterators.add(iterator);
+
+  return iterator;
 }

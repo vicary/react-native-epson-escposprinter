@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
-import { TurboModuleRegistry, type TurboModule } from "react-native";
+import { type TurboModule, TurboModuleRegistry } from "react-native";
 import type {
   PrinterFirmwareInfomation,
   PrinterInformation,
@@ -9,9 +9,9 @@ import type {
 } from "./PrinterConst";
 
 export interface Spec extends TurboModule {
-  addListener: (eventType: string) => void;
+  addListener(eventType: string): void;
 
-  removeListeners: (count: number) => void;
+  removeListeners(count: number): void;
 
   connect(
     /** @type import("./PrinterConst").PrinterSeries */

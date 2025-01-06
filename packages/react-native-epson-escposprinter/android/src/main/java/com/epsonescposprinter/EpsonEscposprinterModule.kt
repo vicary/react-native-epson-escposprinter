@@ -47,7 +47,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   companion object {
     const val NAME = "EpsonEscposprinter"
     private val CODE_ERROR = "EpsonPrinterError"
-    private val CODE_CALLBACK = "EpsonPrinterCallback"
+    private val CODE_CALLBACK = "EpsonCallbackError"
 
     private fun ipToNumber(ip: String): Long =
       ip.split(".").fold(0L) { acc, s -> (acc shl 8) + s.toLong() }
@@ -177,21 +177,24 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         null
       }
 
-  private fun emitEvent(event: String, parameters: WritableMap) =
-    context.takeIf { listenersCount > 0}
-    ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-    ?.emit(event, parameters)
+  private fun emitEvent(event: String, parameters: WritableMap) {
+    context
+      // [ ] Enable this again when we know how to check RCT_NEW_ARCH_ENABLED
+      // .takeIf { listenerCount > 0 }
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      ?.emit(event, parameters)
+  }
 
-  private var listenersCount = 0
+  private var listenerCount = 0
 
   @ReactMethod
   override fun addListener(eventName: String) {
-    listenersCount += 1
+    listenerCount++
   }
 
   @ReactMethod
   override fun removeListeners(count: Double) {
-    listenersCount = (listenersCount - count.toInt()).coerceAtLeast(0)
+    listenerCount -= count.toInt()
   }
 
   @ReactMethod
@@ -1950,59 +1953,77 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
 
   @ReactMethod
   override fun discoveryStart(filter: ReadableMap, promise: Promise) {
-    runCatching {
-      Discovery.start(
-        context,
-        FilterOption().apply {
-          filter.getInt("portType").let { setPortType(it) }
-          filter.getString("broadcast")?.let { setBroadcast(it) }
-          filter.getInt("deviceModel").let { setDeviceModel(it) }
-          filter.getInt("epsonFilter").let { setEpsonFilter(it) }
-          filter.getInt("deviceType").let { setDeviceType(it) }
-          filter.getBoolean("bondedDevices").let {
-            setBondedDevices(
-              if (it) Discovery.TRUE else Discovery.FALSE
-            )
-          }
-          filter.getBoolean("usbDeviceName").let {
-            setUsbDeviceName(
-              if (it) Discovery.TRUE else Discovery.FALSE
-            )
-          }
-        },
-        object : DiscoveryListener {
-          override fun onDiscovery(deviceInfo: DeviceInfo) {
-            emitEvent(
-              "deviceFound",
-              Arguments.createMap().apply {
-                putInt("deviceType", deviceInfo.deviceType)
-                putString("deviceName", deviceInfo.deviceName)
-                putString("target", deviceInfo.target)
-                deviceInfo.ipAddress.takeIf { it.isNotEmpty() }?.let {
-                  putString("ipAddress", it)
+    coroutineScope.launch {
+      runCatching {
+        Discovery.start(
+          context,
+          FilterOption().apply {
+            filter.takeIf { it.hasKey("portType") }
+              ?.let { it.getInt("portType") }
+              ?.let { setPortType(it) }
+
+            filter.takeIf { it.hasKey("broadcast") }
+              ?.let { it.getString("broadcast") }
+              ?.let { setBroadcast(it) }
+
+            filter.takeIf { it.hasKey("deviceModel") }
+              ?.let { it.getInt("deviceModel") }
+              ?.let { setDeviceModel(it) }
+
+            filter.takeIf { it.hasKey("epsonFilter") }
+              ?.let { it.getInt("epsonFilter") }
+              ?.let { setEpsonFilter(it) }
+
+            filter.takeIf { it.hasKey("deviceType") }
+              ?.let { it.getInt("deviceType") }
+              ?.let { setDeviceType(it) }
+
+            filter.takeIf { it.hasKey("bondedDevices") }
+              ?.let { it.getBoolean("bondedDevices") }
+              ?.let { if (it) Discovery.TRUE else Discovery.FALSE }
+              ?.let { setBondedDevices(it) }
+
+            filter.takeIf { it.hasKey("usbDeviceName") }
+              ?.let { it.getBoolean("usbDeviceName") }
+              ?.let { if (it) Discovery.TRUE else Discovery.FALSE }
+              ?.let { setUsbDeviceName(it) }
+          },
+          object : DiscoveryListener {
+            override fun onDiscovery(deviceInfo: DeviceInfo) {
+              emitEvent(
+                "deviceFound",
+                Arguments.createMap().apply {
+                  putInt("deviceType", deviceInfo.deviceType)
+                  putString("deviceName", deviceInfo.deviceName)
+                  putString("target", deviceInfo.target)
+                  deviceInfo.ipAddress
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { putString("ipAddress", it) }
+
+                  deviceInfo.macAddress
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { putString("macAddress", it) }
+
+                  deviceInfo.bdAddress
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { putString("bdAddress", it) }
                 }
-                deviceInfo.macAddress.takeIf { it.isNotEmpty() }?.let {
-                  putString("macAddress", it)
-                }
-                deviceInfo.bdAddress.takeIf { it.isNotEmpty() }?.let {
-                  putString("bdAddress", it)
-                }
-              }
-            )
+              )
+            }
           }
-        }
-      )
-    }
-      .onFailure {
-        promise.reject(
-          CODE_ERROR,
-          if (it is Epos2Exception)
-            it.getErrorStatus().toString()
-          else
-            it.message
         )
       }
-      .onSuccess { promise.resolve(null) }
+        .onFailure {
+          promise.reject(
+            CODE_ERROR,
+            if (it is Epos2Exception)
+              it.getErrorStatus().toString()
+            else
+              it.message
+          )
+        }
+        .onSuccess { promise.resolve(null) }
+    }
   }
 
   @ReactMethod
