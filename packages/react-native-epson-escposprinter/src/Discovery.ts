@@ -60,6 +60,7 @@ export type DeviceInfo = {
   ipAddress?: string;
   macAddress?: string;
   bdAddress?: string;
+  leBdAddress?: string;
 };
 
 export const getPrinterSeriesFromDeviceName = (

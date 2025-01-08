@@ -276,7 +276,12 @@ export type PrinterInformation = {
 };
 
 export type PrinterFirmwareInfomation = {
-  model: string;
+  /**
+   * Android only.
+   *
+   * iOS SDK has no `model` property in `Epos2FirmwareInfo`
+   */
+  model?: string;
   version: string;
 };
 

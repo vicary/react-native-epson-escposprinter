@@ -1578,7 +1578,7 @@
     node-forge "^1.2.1"
     nullthrows "^1.1.1"
 
-"@expo/config-plugins@8.0.11":
+"@expo/config-plugins@8.0.11", "@expo/config-plugins@^7.2.5 || ^8.0.0":
   version "8.0.11"
   resolved "https://registry.yarnpkg.com/@expo/config-plugins/-/config-plugins-8.0.11.tgz#b814395a910f4c8b7cc95d9719dccb6ca53ea4c5"
   integrity sha512-oALE1HwnLFthrobAcC9ocnR9KXLzfWEjgIe4CPe+rDsfC6GDs8dGYCXfRFoCEzoLN4TGYs9RdZ8r0KoCcNrm2A==
@@ -6119,7 +6119,7 @@ expo-web-browser@~13.0.3:
   resolved "https://registry.yarnpkg.com/expo-web-browser/-/expo-web-browser-13.0.3.tgz#dceb05dbc187b498ca937b02adf385b0232a4e92"
   integrity sha512-HXb7y82ApVJtqk8tManyudtTrCtx8xcUnVzmJECeHCB0SsWSQ+penVLZxJkcyATWoJOsFMnfVSVdrTcpKKGszQ==
 
-expo@~51.0.31:
+expo@^51.0.14, expo@~51.0.31:
   version "51.0.39"
   resolved "https://registry.yarnpkg.com/expo/-/expo-51.0.39.tgz#d9efab081a91a0d3e925b0e4648722b13a8fceae"
   integrity sha512-Cs/9xopyzJrpXWbyVUZnr37rprdFJorRgfSp6cdBfvbjxZeKnw2MEu7wJwV/s626i5lZTPGjZPHUF9uQvt51cg==
@@ -10674,6 +10674,14 @@ react-is@^17.0.1:
   version "17.0.2"
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-17.0.2.tgz#e691d4a8e9c789365655539ab372762b0efb54f0"
   integrity sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==
+
+react-native-ble-plx@^3.2.1:
+  version "3.2.1"
+  resolved "https://registry.yarnpkg.com/react-native-ble-plx/-/react-native-ble-plx-3.2.1.tgz#6a518603b2b87caa968edc11c85bc228c3d58596"
+  integrity sha512-cot4pu6qXh7DLcYh91n4BNI5Wm9/oMUSDj24G1tQ86F8sCFJ292AneKxRHkTH2+VxIGQuU2FVvWY1iY6ob0KZQ==
+  dependencies:
+    "@expo/config-plugins" "^7.2.5 || ^8.0.0"
+    expo "^51.0.14"
 
 react-native-builder-bob@^0.20.3:
   version "0.20.4"
