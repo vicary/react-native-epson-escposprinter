@@ -178,6 +178,11 @@ class EpsonEscposprinter: RCTEventEmitter,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
+    guard let target = target as? String else {
+      reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
+      return
+    }
+
     queue.async(flags: .barrier) {
       guard
         let printer = Epos2Printer(
@@ -190,11 +195,6 @@ class EpsonEscposprinter: RCTEventEmitter,
       }
 
       do {
-        guard let target = target as? String else {
-          reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
-          return
-        }
-
         let result = printer.connect(target, timeout: timeout.intValue)
         guard result == EPOS2_SUCCESS.rawValue else {
           reject(CODE_ERROR, String(result), nil)
@@ -407,14 +407,14 @@ class EpsonEscposprinter: RCTEventEmitter,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
+    guard let jobId = jobId as String? else {
+      reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
+      return
+    }
+
     queue.async(flags: .barrier) {
       guard let printer = self.printers[printerId.intValue] else {
         reject(CODE_ERROR, String(EPOS2_ERR_NOT_FOUND.rawValue), nil)
-        return
-      }
-
-      guard let jobId = jobId as String? else {
-        reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
         return
       }
 
@@ -759,11 +759,6 @@ class EpsonEscposprinter: RCTEventEmitter,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    guard let data = data as String? else {
-      reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
-      return
-    }
-
     queue.async(flags: .barrier) {
       guard let printer = self.printers[printerId.intValue] else {
         reject(CODE_ERROR, String(EPOS2_ERR_NOT_FOUND.rawValue), nil)
@@ -772,7 +767,7 @@ class EpsonEscposprinter: RCTEventEmitter,
 
       guard
         let imageData = Data(
-          base64Encoded: data,
+          base64Encoded: data! as String,
           options: .ignoreUnknownCharacters
         ),
         let image = UIImage(data: imageData)
@@ -1367,11 +1362,6 @@ class EpsonEscposprinter: RCTEventEmitter,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    guard let data = data as String? else {
-      reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
-      return
-    }
-
     queue.async(flags: .barrier) {
       guard let printer = self.printers[printerId.intValue] else {
         reject(CODE_ERROR, String(EPOS2_ERR_NOT_FOUND.rawValue), nil)
@@ -1380,7 +1370,7 @@ class EpsonEscposprinter: RCTEventEmitter,
 
       guard
         let bytes = Data(
-          base64Encoded: data,
+          base64Encoded: data! as String,
           options: .ignoreUnknownCharacters
         )
       else {
@@ -1586,14 +1576,14 @@ class EpsonEscposprinter: RCTEventEmitter,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
+    guard let administratorPassword = administratorPassword as String? else {
+      reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
+      return
+    }
+
     queueEx.async {
       guard let printer = self.printers[printerId.intValue] else {
         reject(CODE_ERROR, String(EPOS2_ERR_NOT_FOUND.rawValue), nil)
-        return
-      }
-
-      guard let password = administratorPassword as String? else {
-        reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
         return
       }
 
@@ -1603,7 +1593,7 @@ class EpsonEscposprinter: RCTEventEmitter,
 
       let result = printer.verifyPassword(
         timeout.intValue,
-        administratorPassword: password
+        administratorPassword: administratorPassword
       )
       guard result == EPOS2_SUCCESS.rawValue else {
         reject(CODE_ERROR, String(result), nil)

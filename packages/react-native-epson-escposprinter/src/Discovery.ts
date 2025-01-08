@@ -7,7 +7,7 @@ import { ErrorCode, getEpsonError } from "./errors";
 import { events, NativeInterface } from "./NativeInterface";
 import { PrinterSeries } from "./PrinterConst";
 
-export const enum DeviceType {
+export const enum FilterDeviceType {
   TYPE_ALL = 0,
   TYPE_PRINTER = 1,
   TYPE_HYBRID_PRINTER = 2,
@@ -23,28 +23,28 @@ export const enum DeviceType {
   TYPE_GFE = 12,
 }
 
-export const enum PortType {
+export const enum FilterPortType {
   PORTTYPE_ALL = 0,
   PORTTYPE_TCP = 1,
   PORTTYPE_BLUETOOTH = 2,
   PORTTYPE_USB = 3,
 }
 
-export const enum Model {
+export const enum FilterModel {
   MODEL_ALL = 0,
 }
 
-export const enum EpsonFilter {
+export const enum FilterEpson {
   FILTER_NONE = 1,
   FILTER_NAME = 0,
 }
 
 export type FilterOptions = {
-  deviceType?: DeviceType;
-  portType?: PortType;
+  deviceType?: FilterDeviceType;
+  portType?: FilterPortType;
   boardcast?: string;
-  deviceModel?: Model;
-  epsonFilter?: EpsonFilter;
+  deviceModel?: FilterModel;
+  epsonFilter?: FilterEpson;
   bondedDevices?: boolean;
   usbDeviceName?: boolean;
 };
@@ -54,7 +54,7 @@ export type DiscoveryOptions = {
 };
 
 export type DeviceInfo = {
-  deviceType: DeviceType;
+  deviceType: FilterDeviceType;
   deviceName: string;
   target: string;
   ipAddress?: string;

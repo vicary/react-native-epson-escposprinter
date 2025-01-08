@@ -1,50 +1,96 @@
 import { useIsHermes } from "@/hooks/useIsHermes";
 import { useNewArchitecture } from "@/hooks/useNewArchitecture";
-import { Link } from "expo-router";
-import { FunctionComponent } from "react";
-import { Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
-import { PrinterSeries } from "react-native-epson-escposprinter";
+import React, { FunctionComponent, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import {
+  connect,
+  DeviceInfo,
+  discoverPrinters,
+  FilterDeviceType,
+  getPrinterSeriesFromDeviceName,
+  PrinterAlign,
+  PrinterCutType,
+  PrinterFont,
+  PrinterLanguage,
+  PrinterLocale,
+  PrinterSymbolLevelQrcode,
+  PrinterSymbolTypeQrcode,
+} from "react-native-epson-escposprinter";
 
-const availablePrinters: Record<PrinterSeries, string> = {
-  0: "TM_M10",
-  1: "TM_M30",
-  2: "TM_P20",
-  3: "TM_P60",
-  4: "TM_P60II",
-  5: "TM_P80",
-  6: "TM_T20",
-  7: "TM_T60",
-  8: "TM_T70",
-  9: "TM_T81",
-  10: "TM_T82",
-  11: "TM_T83",
-  12: "TM_T88",
-  13: "TM_T90",
-  14: "TM_T90KP",
-  15: "TM_U220",
-  16: "TM_U330",
-  17: "TM_L90",
-  18: "TM_H6000",
-  19: "TM_T83III",
-  20: "TM_T100",
-  22: "TM_M30II",
-  23: "TS_100",
-  24: "TM_M50",
-  25: "TM_T88VII",
-  26: "TM_L90LFC",
-  27: "EU_M30",
-  28: "TM_L100",
-  30: "TM_P20II",
-  31: "TM_P80II",
-  32: "TM_M30III",
-  33: "TM_M50II",
-  34: "TM_M55",
-  35: "TM_U220II",
+const testPrint = async (
+  device: DeviceInfo,
+  lang: PrinterLocale,
+) => {
+  const series = getPrinterSeriesFromDeviceName(device.deviceName);
+  if (!series) {
+    throw new Error(`Unsupported printer: ${device.deviceName}`);
+  }
+
+  const printer = await connect(series, lang, device.target);
+  console.log("✅ connected:", device.target);
+
+  const info = await printer.getPrinterInformation();
+  console.log("✅ status", info);
+
+  await printer.addTextLang(PrinterLanguage.LANG_MULTI);
+  await printer.addTextAlign(PrinterAlign.ALIGN_LEFT);
+  await printer.addTextFont(PrinterFont.FONT_A);
+
+  [
+    [1, 1],
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [7, 8],
+  ].forEach(async ([width, height]) => {
+    await printer.addTextSize(width, height);
+    await printer.addText("Hello World!你好世界！\n");
+  });
+
+  await printer.addSymbol(
+    "https://www.google.com",
+    PrinterSymbolTypeQrcode.SYMBOL_QRCODE_MODEL_1,
+    PrinterSymbolLevelQrcode.LEVEL_H,
+    8,
+  );
+  console.log("✅ printText");
+
+  await printer.addCut(PrinterCutType.FULL_CUT_FEED);
+  console.log("✅ cutPaper");
+
+  await printer.disconnect();
+  console.log("✅ disconnect");
 };
 
 const Home: FunctionComponent = () => {
   const isFabric = useNewArchitecture();
   const isHermes = useIsHermes();
+  const [printers, setPrinters] = useState<DeviceInfo[]>([]);
+
+  useEffect(() => {
+    const promise = discoverPrinters({
+      deviceType: FilterDeviceType.TYPE_PRINTER,
+    }, { verbose: true });
+
+    (async () => {
+      for await (const printer of await promise) {
+        setPrinters((printers) => [...printers, printer]);
+      }
+    })();
+
+    return () => {
+      promise.then((d) => d.return());
+    };
+  }, []);
 
   return (
     <SafeAreaView className="bg-gray-300">
@@ -64,19 +110,56 @@ const Home: FunctionComponent = () => {
           </View>
 
           <View className="flex flex-row flex-wrap gap-3">
-            {Object.entries(availablePrinters).map(([key, value]) => (
-              <Link key={key} href={`/${key}`} asChild>
-                <Pressable className="bg-gray-200 active:bg-gray-300 active:opacity-50 rounded-xl w-32">
-                  <Text className="p-3 color-blue-500 text-lg text-center">
-                    {value}
-                  </Text>
-                </Pressable>
-              </Link>
+            {printers.map((printer) => (
+              <Printer key={printer.target} printer={printer} />
             ))}
+          </View>
+
+          <View>
+            <ActivityIndicator size="small" />
+            <Text className="text-xl">Scanning...</Text>
           </View>
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+};
+
+const Printer: FunctionComponent<{ printer: DeviceInfo }> = ({ printer }) => {
+  const [printing, setPrinting] = useState(false);
+
+  return (
+    <Pressable
+      className="bg-gray-200 active:bg-gray-300 active:opacity-50 rounded-xl w-32"
+      onPress={async () => {
+        setPrinting(true);
+
+        try {
+          await testPrint(printer, PrinterLocale.MODEL_CHINESE);
+        } catch (e) {
+          if (e instanceof Error) {
+            console.error(e.message);
+          } else {
+            throw e;
+          }
+        }
+
+        setPrinting(false);
+      }}
+    >
+      <View className="p-4 flex flex-col justify-between">
+        {printing ? <ActivityIndicator size="small" color="blue" /> : (
+          <>
+            <Text className="color-black">{printer.deviceName}</Text>
+
+            <Text className="text-xs color-blue-500">{printer.bdAddress}</Text>
+            <Text className="text-xs color-blue-500">{printer.ipAddress}</Text>
+            <Text className="text-xs color-black">{printer.macAddress}</Text>
+            <Text className="text-xs color-black">{printer.target}</Text>
+          </>
+        )}
+      </View>
+    </Pressable>
   );
 };
 
