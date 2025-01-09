@@ -182,9 +182,9 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    */
   async disconnect() {
     try {
-      printers.delete(this.#id);
+      await NativeInterface.disconnect(this.#id);
 
-      return await NativeInterface.disconnect(this.#id);
+      printers.delete(this.#id);
     } catch (error) {
       throw getEpsonError(error, {
         [ErrorCode.ERR_ILLEGAL]:
@@ -1737,8 +1737,6 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
   async transaction(callback: (printer: Printer) => Promise<void>) {
     await this.beginTransaction();
     await callback(this);
-    // [ ] Check if we need to call `endTransaction` on error
-    // [ ] await this.sendData(timeout);
     await this.endTransaction();
   }
 

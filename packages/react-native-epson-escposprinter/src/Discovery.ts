@@ -204,14 +204,12 @@ export async function discoverPrinters(
   filter: FilterOptions = {},
   options?: DiscoveryOptions,
 ) {
-  const hasLock = listener === null;
-
   const iterator = createDeferredIterable<DeviceInfo>({
     dispose: async () => {
       iterators.delete(iterator);
 
-      try {
-        if (hasLock) {
+      if (iterators.size === 0) {
+        try {
           if (options?.verbose) {
             console.debug(`Stopping discovery service...`);
           }
@@ -225,15 +223,15 @@ export async function discoverPrinters(
               cache.clear();
               cooldown = null;
             });
+        } catch (error) {
+          throw getEpsonError(error) ?? error;
         }
-      } catch (error) {
-        throw getEpsonError(error) ?? error;
       }
     },
   });
 
   try {
-    if (hasLock) {
+    if (iterators.size === 0) {
       listener?.remove(); // HMR may cause multiple subscriptions?
       listener = events.addListener(
         "deviceFound",

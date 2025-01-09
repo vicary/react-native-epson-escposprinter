@@ -211,10 +211,16 @@ class EpsonEscposprinter: RCTEventEmitter,
       }
 
       printer.setReceiveEventDelegate(self)
+      printer.setStatusChangeEventDelegate(self)
 
-      self.printers.append(printer)
-
-      resolve(self.printers.count - 1)
+      // Reuse printer ID after disconnection
+      if let printerId = self.printers.firstIndex(where: { $0 == nil }) {
+        self.printers[printerId] = printer
+        resolve(printerId)
+      } else {
+        self.printers.append(printer)
+        resolve(self.printers.count - 1)
+      }
     }
   }
 
@@ -224,10 +230,35 @@ class EpsonEscposprinter: RCTEventEmitter,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    queue.async(flags: .barrier) {
+    // [ ] Rewrite all queue.async with Task if it works
+    Task {
       guard let printer = self.printers[printerId.intValue] else {
         reject(CODE_ERROR, String(EPOS2_ERR_NOT_FOUND.rawValue), nil)
         return
+      }
+
+      do {
+        let timeoutInSeconds = Date().timeIntervalSince1970 + 5
+        var result = printer.disconnect()
+        while result == EPOS2_ERR_PROCESSING.rawValue {
+          guard Date().timeIntervalSince1970 < timeoutInSeconds else {
+            reject(CODE_ERROR, String(EPOS2_ERR_TIMEOUT.rawValue), nil)
+            return
+          }
+
+          if #available(iOS 16.0, *) {
+            try await Task.sleep(for: .seconds(0.1))
+          } else {
+            try await Task.sleep(nanoseconds: 100_000_000)
+          }
+
+          result = printer.disconnect()
+        }
+
+        guard result == EPOS2_SUCCESS.rawValue else {
+          reject(CODE_ERROR, String(result), nil)
+          return
+        }
       }
 
       do {
@@ -238,8 +269,11 @@ class EpsonEscposprinter: RCTEventEmitter,
         }
       }
 
+      printer.setReceiveEventDelegate(nil)
+      printer.setStatusChangeEventDelegate(nil)
+
       do {
-        let result = printer.disconnect()
+        let result = printer.clearCommandBuffer()
         guard result == EPOS2_SUCCESS.rawValue else {
           reject(CODE_ERROR, String(result), nil)
           return

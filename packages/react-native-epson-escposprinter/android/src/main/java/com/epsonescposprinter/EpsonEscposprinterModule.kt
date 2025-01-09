@@ -2,6 +2,7 @@ package com.epsonescposprinter
 
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.widget.Toast
 import androidx.lifecycle.ViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.epson.epos2.discovery.DeviceInfo;
@@ -23,7 +24,6 @@ import com.epson.epos2.printer.SetPrinterSettingExListener
 import com.epson.epos2.printer.StatusChangeListener
 import com.epson.epos2.printer.VerifyPasswordListener
 import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.JavaScriptModule
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactMethod
@@ -35,7 +35,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -205,81 +208,14 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     timeout: Double,
     promise: Promise
   ) {
-    runCatching {
-      Printer(printerSeries.toInt(), lang.toInt(), context).apply {
-        connect(
-          target,
-          timeout.takeIf { it > 0 }?.toInt()
-            ?: Printer.PARAM_DEFAULT
-        )
-      }
-    }
-      .onFailure {
-        promise.reject(
-          CODE_ERROR,
-          if (it is Epos2Exception)
-            it.getErrorStatus().toString()
-          else
-            it.message
-        )
-      }
-      .onSuccess {
-        val printerId = printersId.incrementAndGet()
-
-        it.setStatusChangeEventListener(
-          object : StatusChangeListener {
-            override fun onPtrStatusChange(
-              printer: Printer,
-              event: Int
-            ) {
-              emitEvent(
-                "statusChange",
-                Arguments.createMap().apply {
-                  putInt("printerId", printerId)
-                  putInt("status", event)
-                }
-              )
-            }
-          }
-        )
-
-        it.setReceiveEventListener(
-          object : ReceiveListener {
-            override fun onPtrReceive(
-              printer: Printer,
-              code: Int,
-              status: PrinterStatusInfo,
-              printJobId: String?
-            ) {
-              emitEvent(
-                "printStatusChange",
-                Arguments.createMap().apply {
-                  putInt("printerId", printerId)
-                  putInt("code", code)
-                  putMap("status", statusToObject(status))
-                  printJobId?.let { putString("printJobId", it) }
-                }
-              )
-            }
-          }
-        )
-
-        it.startMonitor()
-
-        printers.set(printerId, it)
-        promise.resolve(printerId)
-      }
-  }
-
-  @ReactMethod
-  override fun disconnect(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching {
-        getPrinter(id, promise)?.apply {
-          stopMonitor()
-          setStatusChangeEventListener(null)
-          setReceiveEventListener(null)
-          disconnect()
+        Printer(printerSeries.toInt(), lang.toInt(), context).apply {
+          connect(
+            target,
+            timeout.takeIf { it > 0 }?.toInt()
+              ?: Printer.PARAM_DEFAULT
+          )
         }
       }
         .onFailure {
@@ -289,6 +225,97 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
               it.getErrorStatus().toString()
             else
               it.message
+          )
+        }
+        .onSuccess {
+          val printerId = printersId.incrementAndGet()
+
+          it.setStatusChangeEventListener(
+            object : StatusChangeListener {
+              override fun onPtrStatusChange(
+                printer: Printer,
+                event: Int
+              ) {
+                emitEvent(
+                  "statusChange",
+                  Arguments.createMap().apply {
+                    putInt("printerId", printerId)
+                    putInt("status", event)
+                  }
+                )
+              }
+            }
+          )
+
+          it.setReceiveEventListener(
+            object : ReceiveListener {
+              override fun onPtrReceive(
+                printer: Printer,
+                code: Int,
+                status: PrinterStatusInfo,
+                printJobId: String?
+              ) {
+                emitEvent(
+                  "printStatusChange",
+                  Arguments.createMap().apply {
+                    putInt("printerId", printerId)
+                    putInt("code", code)
+                    putMap("status", statusToObject(status))
+                    printJobId?.let { putString("printJobId", it) }
+                  }
+                )
+              }
+            }
+          )
+
+          it.startMonitor()
+
+          printers.set(printerId, it)
+          promise.resolve(printerId)
+        }
+    }
+  }
+
+  @ReactMethod
+  override fun disconnect(id: Double, promise: Promise) {
+    coroutineScope.launch {
+      runCatching {
+        getPrinter(id, promise)?.apply {
+          stopMonitor()
+
+          withTimeout(5000) {
+            while (true) {
+              try {
+                disconnect()
+                break
+              } catch (e: Epos2Exception) {
+                when (e.getErrorStatus()) {
+                  Epos2Exception.ERR_PROCESSING -> delay(100)
+                  // Epos2Exception.ERR_ILLEGAL -> break
+                  else -> throw e
+                }
+              }
+            }
+          }
+
+          setStatusChangeEventListener(null)
+          setReceiveEventListener(null)
+          clearCommandBuffer()
+        }
+      }
+        .onFailure {
+          getPrinter(id, promise)?.startMonitor()
+
+          promise.reject(
+            CODE_ERROR,
+            when (it) {
+              is Epos2Exception ->
+                it.getErrorStatus().toString()
+              is TimeoutCancellationException ->
+                Epos2Exception.ERR_TIMEOUT.toString()
+              else ->
+                it.message
+            }
           )
         }
         .onSuccess {

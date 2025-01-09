@@ -35,9 +35,27 @@ for await (const info of discoverPrinters()) {
   await printer.transaction(async () => {
     await printer.addText("ABC");
     await printer.sendData();
+    await printer.clearCommandBuffer();
   });
+
+  await printer.disconnect();
 }
 ```
+
+## Building the example app
+
+1. `yarn install`
+1. `cd examples/testprint-app`
+1. Run `yarn arch:new` to initialize New Architecture, otherwise run
+   `yarn arch:old`.
+1. For Android targets, run `yarn android`
+1. For iOS targets, expo has no obvious way to add frameworks in the generated
+   XCode project, you have to add them manually each time.
+   1. Open `ios/TestPrint.xcodeproj` using XCode
+   1. Select `TestPrint` in the `Targets` section
+   1. Click the `+` sign in `Frameworks, Libraries and Embedded Content`
+   1. Add `ExternalAccessory.framework` and `libxml2.2.tbd`
+   1. Run `yarn ios`
 
 ## Contributing
 
@@ -47,15 +65,3 @@ repository and the development workflow.
 If you use this library at work, consider
 [sponsoring](https://github.com/sponsors/vicary) for a first-class technical
 support.
-
-## TODO
-
-1. Rename citizen to epson
-   1. [x] TypeScript
-   2. [x] Android
-   3. [x] iOS
-2. Implement SDK methods
-   1. [x] TypeScript
-   2. [x] Android
-   3. [ ] iOS
-      1. [ ] XCode Project reconfiguration, included libraries... etc.
