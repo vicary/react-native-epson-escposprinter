@@ -17,12 +17,6 @@ Promise.withResolvers ??= <T>() => {
   };
 };
 
-Reflect.set(
-  Symbol,
-  "asyncDispose",
-  Symbol.asyncDispose ?? Symbol.for("Symbol.asyncDispose"),
-);
-
 export type DeferredIteratorOptions = {
   readonly dispose?: () => void | Promise<void>;
 };
@@ -33,6 +27,8 @@ export interface DeferredIterator<
   TNext = unknown,
 > extends AsyncIterator<T, TReturn, TNext>, AsyncDisposable {
   readonly active: boolean;
+  readonly backPressure: number;
+  readonly frontPressure: number;
   push: (value: T | Promise<T>) => void;
   return: NonNullable<AsyncIterator<T, TReturn, TNext>["return"]>;
 }
@@ -45,13 +41,9 @@ export const createDeferredIterator = <
   const frontPressure: PromiseWithResolvers<T>[] = [];
   const backPressure: Promise<T>[] = [];
   let returnValue: TReturn | undefined | symbol = activeSymbol;
-  let disposeTimer: number | NodeJS.Timeout | undefined;
 
   return {
     async [Symbol.asyncDispose]() {
-      clearTimeout(disposeTimer);
-      disposeTimer = 1;
-
       await this.return();
       await options?.dispose?.();
     },
@@ -68,8 +60,8 @@ export const createDeferredIterator = <
         // compat for runtimes without `await using`
         // 1. Users must call return() manually
         // 2. 100ms should be enough for multiple macrotasks
-        if (options?.dispose) {
-          disposeTimer ??= setTimeout(() => options?.dispose?.(), 100);
+        if (options?.dispose && !("asyncDispose" in Symbol)) {
+          setTimeout((d) => d(), 100, options.dispose);
         }
       }
 
@@ -114,6 +106,12 @@ export const createDeferredIterator = <
     },
     get active() {
       return returnValue === activeSymbol;
+    },
+    get backPressure() {
+      return backPressure.length;
+    },
+    get frontPressure() {
+      return frontPressure.length;
     },
   };
 };
