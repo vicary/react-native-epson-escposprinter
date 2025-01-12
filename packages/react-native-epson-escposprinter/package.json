@@ -105,6 +105,9 @@
     ],
     "preset": "react-native"
   },
+  "dependencies": {
+    "eventemitter3": "^5.0.1"
+  },
   "devDependencies": {
     "@babel/core": "^7.20.12",
     "@babel/eslint-parser": "^7.19.1",
@@ -159,8 +162,5 @@
         }
       ]
     ]
-  },
-  "dependencies": {
-    "eventemitter3": "^5.0.1"
   }
 }
