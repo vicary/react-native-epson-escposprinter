@@ -46,16 +46,10 @@ for await (const info of discoverPrinters()) {
 
 1. `yarn install`
 1. `cd examples/testprint-app`
-1. Run `yarn arch:new` to initialize New Architecture, otherwise run
-   `yarn arch:old`.
-1. For Android targets, run `yarn android`
-1. For iOS targets, expo has no obvious way to add frameworks in the generated
-   XCode project, you have to add them manually each time.
-   1. Open `ios/TestPrint.xcodeproj` using XCode
-   1. Select `TestPrint` in the `Targets` section
-   1. Click the `+` sign in `Frameworks, Libraries and Embedded Content`
-   1. Add `ExternalAccessory.framework` and `libxml2.2.tbd`
-   1. Run `yarn ios`
+1. Prebuild in New Architecture by running `yarn arch:new`, or run
+   `yarn arch:old` to test in legacy environments.
+1. Run `yarn android` to test in Android
+1. Run `yarn ios` to test in iOS
 
 ## Contributing
 

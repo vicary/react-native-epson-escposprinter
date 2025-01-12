@@ -56,13 +56,12 @@ RCT_EXTERN_METHOD(beginTransaction
 
 RCT_EXTERN_METHOD(endTransaction
                   :         (double)                 printerId
-                  withControl: (double)              control
                   resolver: (RCTPromiseResolveBlock) resolve
                   rejecter: (RCTPromiseRejectBlock)  reject)
 
 RCT_EXTERN_METHOD(requestPrintJobStatus
                   :         (double)                 printerId
-                  withJobId: (double)                jobId
+                  withJobId: (NSString *)            jobId
                   resolver: (RCTPromiseResolveBlock) resolve
                   rejecter: (RCTPromiseRejectBlock)  reject)
 

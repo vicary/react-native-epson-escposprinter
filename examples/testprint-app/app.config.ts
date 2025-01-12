@@ -58,6 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         launchMode: "most-recent",
       },
     ],
+    "react-native-epson-escposprinter",
   ],
   experiments: {
     turboModules: newArchEnabled,

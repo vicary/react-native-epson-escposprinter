@@ -106,6 +106,7 @@
     "preset": "react-native"
   },
   "dependencies": {
+    "@expo/config-plugins": "^9.0.14",
     "eventemitter3": "^5.0.1"
   },
   "devDependencies": {

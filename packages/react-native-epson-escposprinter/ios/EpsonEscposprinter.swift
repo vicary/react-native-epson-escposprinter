@@ -33,6 +33,15 @@ class EpsonEscposprinter: RCTEventEmitter,
     hasListeners = false
   }
 
+  override func supportedEvents() -> [String]! {
+    return [
+      "deviceFound",
+      "printStatusChange",
+      "statusChange",
+      "updateProgress",
+    ]
+  }
+
   func sendEventSafe(_ name: String, withData data: NSDictionary?) {
     if hasListeners {
       sendEvent(withName: name, body: data)
@@ -1581,9 +1590,19 @@ class EpsonEscposprinter: RCTEventEmitter,
   func setPrinterSettingEx(
     _ printerId: NSNumber,
     waitFor timeout: NSNumber,
+    withSettings jsonString: NSString,
+    withPassword administratorPassword: NSString,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
+    guard
+      let jsonString = jsonString as String?,
+      let administratorPassword = administratorPassword as String?
+    else {
+      reject(CODE_ERROR, String(EPOS2_ERR_ILLEGAL.rawValue), nil)
+      return
+    }
+
     queueEx.async {
       guard let printer = self.printers[printerId.intValue] else {
         reject(CODE_ERROR, String(EPOS2_ERR_NOT_FOUND.rawValue), nil)
@@ -1594,7 +1613,11 @@ class EpsonEscposprinter: RCTEventEmitter,
         EpsonPrinterDelegate(resolve: resolve, reject: reject)
       )
 
-      let result = printer.getSettingEx(timeout.intValue)
+      let result = printer.setPrinterSettingEx(
+        timeout.intValue,
+        jsonString: jsonString,
+        administratorPassword: administratorPassword
+      )
       guard result == EPOS2_SUCCESS.rawValue else {
         reject(CODE_ERROR, String(result), nil)
         return
