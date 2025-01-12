@@ -40,6 +40,7 @@
     "android",
     "ios",
     "cpp",
+    "app.plugin.js",
     "*.podspec",
     "!lib/typescript/example",
     "!ios/build",
