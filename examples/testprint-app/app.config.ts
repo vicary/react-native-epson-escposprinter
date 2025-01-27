@@ -45,6 +45,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-font",
     "expo-router",
+    "expo-sqlite",
+    "react-native-epson-escposprinter",
     [
       "expo-build-properties",
       {
@@ -58,7 +60,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         launchMode: "most-recent",
       },
     ],
-    "react-native-epson-escposprinter",
   ],
   experiments: {
     turboModules: newArchEnabled,

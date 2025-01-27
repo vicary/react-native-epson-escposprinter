@@ -1,9 +1,9 @@
 import type { EmitterSubscription } from "react-native";
-import {
-  createDeferredIterable,
-  type DeferredIterableIterator,
-} from "./deferred-iterable";
 import { ErrorCode, getEpsonError } from "./errors";
+import {
+  asyncIterableIteratorWithResolvers,
+  type AsyncIterableWithResolvers,
+} from "./iterator";
 import { events, NativeInterface } from "./NativeInterface";
 import { PrinterSeries } from "./PrinterConst";
 
@@ -191,7 +191,7 @@ const cache = new Map<string, DeviceInfo>();
 /**
  * References to active subscribers for sharing the cache.
  */
-const iterators = new Set<DeferredIterableIterator<DeviceInfo>>();
+const iterators = new Set<AsyncIterableWithResolvers<DeviceInfo>>();
 
 /**
  * Epson's Discovery service requires a manual cooldown after stopping.
@@ -204,7 +204,7 @@ export async function discoverPrinters(
   filter: FilterOptions = {},
   options?: DiscoveryOptions,
 ) {
-  const iterator = createDeferredIterable<DeviceInfo>({
+  const iterator = asyncIterableIteratorWithResolvers<DeviceInfo>({
     dispose: async () => {
       iterators.delete(iterator);
 
@@ -233,16 +233,13 @@ export async function discoverPrinters(
   try {
     if (iterators.size === 0) {
       listener?.remove(); // HMR may cause multiple subscriptions?
-      listener = events.addListener(
-        "deviceFound",
-        (info: DeviceInfo) => {
-          for (const it of iterators) {
-            it.push(info);
-          }
+      listener = events.addListener("deviceFound", (info: DeviceInfo) => {
+        for (const it of iterators) {
+          it.push(info);
+        }
 
-          cache.set(info.target, info);
-        },
-      );
+        cache.set(info.target, info);
+      });
 
       // Let previous stop action to finsih before starting a new one.
       await cooldown;
@@ -254,12 +251,13 @@ export async function discoverPrinters(
       await NativeInterface.discoveryStart(filter);
     }
   } catch (error) {
-    throw getEpsonError(error, {
-      [ErrorCode.ERR_ILLEGAL]:
-        `- Tried to start search when search had been already done.
+    throw (
+      getEpsonError(error, {
+        [ErrorCode.ERR_ILLEGAL]: `- Tried to start search when search had been already done.
 - Bluetooth is OFF.
 - There is no permission for the position information.`,
-    }) ?? error;
+      }) ?? error
+    );
   }
 
   for (const value of cache.values()) {

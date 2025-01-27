@@ -65,6 +65,17 @@
       "@commitlint/config-conventional"
     ]
   },
+  "prettier": {
+    "arrowParens": "always",
+    "bracketSpacing": true,
+    "jsxSingleQuote": false,
+    "printWidth": 80,
+    "semi": true,
+    "singleQuote": false,
+    "tabWidth": 2,
+    "trailingComma": "all",
+    "useTabs": false
+  },
   "eslintConfig": {
     "parser": "@typescript-eslint/parser",
     "plugins": [
@@ -111,9 +122,9 @@
     "eventemitter3": "^5.0.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.12",
-    "@babel/eslint-parser": "^7.19.1",
-    "@babel/preset-env": "^7.20.2",
+    "@babel/core": "^7.26.0",
+    "@babel/eslint-parser": "^7.26.5",
+    "@babel/preset-env": "^7.26.0",
     "@react-native/eslint-config": "^0.75.2",
     "@react-native/eslint-plugin": "^0.75.2",
     "@types/jest": "^29.5.12",
@@ -130,15 +141,17 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-native": "^4.0.0",
     "jest": "^29.3.1",
-    "metro-react-native-babel-preset": "^0.74.0",
+    "metro-react-native-babel-preset": "^0.77.0",
     "prettier": "^2.0.5",
+    "react": "^19.0.0",
+    "react-native": "^0.76.6",
     "react-native-builder-bob": "^0.20.3",
     "semantic-release": "^24.1.0",
     "typescript": "*"
   },
   "peerDependencies": {
-    "react": "^17 || ^18 || ^19",
-    "react-native": "^0.69 || ^0.70 || ^0.71 || ^0.72 || ^0.73 || ^0.74 || ^0.75"
+    "react": "^17.0.0 || ^18.0.0 || ^19.0.0",
+    "react-native": "^0.69.0 || ^0.70.0 || ^0.71.0 || ^0.72.0 || ^0.73.0 || ^0.74.0 || ^0.75.0 || ^0.76.0"
   },
   "engines": {
     "node": ">= 16.0.0"
@@ -157,12 +170,7 @@
     "targets": [
       "commonjs",
       "module",
-      [
-        "typescript",
-        {
-          "project": "tsconfig.build.json"
-        }
-      ]
+      "typescript"
     ]
   }
 }

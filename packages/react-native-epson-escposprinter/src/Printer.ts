@@ -84,14 +84,14 @@ export async function connect(
 
     return printer;
   } catch (error) {
-    throw getEpsonError(error, {
-      [ErrorCode.ERR_ILLEGAL]:
-        "Tried to start communication with a printer with which communication had been already established.",
-    }) ?? error;
+    throw (
+      getEpsonError(error, {
+        [ErrorCode.ERR_ILLEGAL]:
+          "Tried to start communication with a printer with which communication had been already established.",
+      }) ?? error
+    );
   }
 }
-
-// [ ] Triage native events to javascript class instances. (use weak references for reverse id lookup)
 
 abstract class CommonPrinter extends EventEmitter<{
   // [ ] Refactor native events into more javascript-like implementations.
@@ -107,6 +107,7 @@ abstract class CommonPrinter extends EventEmitter<{
     printJobId?: string,
   ];
   updateProgress: [task: string, progress: number];
+  disconnect: [];
 }> {
   public static TRUE = 1;
   public static FALSE = 0;
@@ -185,11 +186,15 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
       await NativeInterface.disconnect(this.#id);
 
       printers.delete(this.#id);
+
+      this.emit("disconnect");
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]:
-          "Tried to end communication where it had not been established.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "Tried to end communication where it had not been established.",
+        }) ?? error
+      );
     }
   }
 
@@ -219,9 +224,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         timeout ?? Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]: "The control commands have not been buffered.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "The control commands have not been buffered.",
+        }) ?? error
+      );
     }
   }
 
@@ -238,10 +246,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.beginTransaction(this.#id);
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]:
-          "Another transaction had been already started by this function.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "Another transaction had been already started by this function.",
+        }) ?? error
+      );
     }
   }
 
@@ -258,10 +268,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.endTransaction(this.#id);
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]:
-          "This API was called while no transaction had been started.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "This API was called while no transaction had been started.",
+        }) ?? error
+      );
     }
   }
 
@@ -285,9 +297,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.requestPrintJobStatus(this.#id, printJobId);
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_CONNECT]: "Communication error",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_CONNECT]: "Communication error",
+        }) ?? error
+      );
     }
   }
 
@@ -1507,9 +1521,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
 
       return ret as CallbackCode;
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_CONNECT]: "Communication with the server failed.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_CONNECT]: "Communication with the server failed.",
+        }) ?? error
+      );
     }
   }
 
@@ -1581,10 +1597,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
 
       return ret as PrinterFirmwareInfomation[];
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_PARAM]:
-          "- An invalid parameter was passed.\n - This API was called before updateFirmware was executed.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_PARAM]:
+            "- An invalid parameter was passed.\n - This API was called before updateFirmware was executed.",
+        }) ?? error
+      );
     }
   }
 
@@ -1731,30 +1749,102 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     }
   }
 
+  #mutex: Promise<unknown> = Promise.resolve();
+
   /**
    * Sending print data in the callback as a single transaction.
    */
   async transaction(callback: (printer: Printer) => Promise<void>) {
-    await this.beginTransaction();
-    await callback(this);
-    await this.endTransaction();
+    this.#mutex = this.#mutex.then(async () => {
+      await this.beginTransaction();
+      await callback(this);
+      await this.endTransaction();
+    });
+
+    await this.#mutex;
   }
 
   /**
    * Sending print data in the callback as a single rotate batch.
    */
   async rotate(callback: (printer: Printer) => Promise<void>) {
-    await this.addRotateBegin();
-    await callback(this);
-    await this.addRotateEnd();
+    this.#mutex = this.#mutex.then(async () => {
+      await this.addRotateBegin();
+      await callback(this);
+      await this.addRotateEnd();
+    });
+
+    await this.#mutex;
   }
 
   /**
    * Sending print data in the callback as a single page.
    */
   async page(callback: (printer: Printer) => Promise<void>) {
-    await this.addPageBegin();
-    await callback(this);
-    await this.addPageEnd();
+    this.#mutex = this.#mutex.then(async () => {
+      await this.addPageBegin();
+      await callback(this);
+      await this.addPageEnd();
+    });
+
+    await this.#mutex;
   }
 }
+
+// For future use: incremental status change
+//
+// this.on("statusChange", async (event) => {
+//   switch (event) {
+//     case PrinterStatusChangeEvent.EVENT_ONLINE:
+//       status.online = true;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_OFFLINE:
+//       status.online = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_POWER_OFF:
+//       status.connection = false;
+//       status.online = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_COVER_CLOSE:
+//       status.coverOpen = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_COVER_OPEN:
+//       status.coverOpen = true;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_PAPER_OK:
+//       status.paper = PrinterPaperStatus.PAPER_OK;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_PAPER_NEAR_END:
+//       status.paper = PrinterPaperStatus.PAPER_NEAR_END;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_PAPER_EMPTY:
+//       status.paper = PrinterPaperStatus.PAPER_EMPTY;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_DRAWER_HIGH:
+//       status.drawer = PrinterDrawerStatus.DRAWER_HIGH;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_DRAWER_LOW:
+//       status.drawer = PrinterDrawerStatus.DRAWER_LOW;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_BATTERY_EMPTY:
+//       status.batteryLevel = PrinterBatteryLevelStatus.BATTERY_LEVEL_0;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_REMOVAL_WAIT_PAPER:
+//       status.removalWaiting = true;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_REMOVAL_WAIT_NONE:
+//       status.removalWaiting = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_AUTO_RECOVER_OK:
+//       status.autoRecoverError = undefined;
+//       break;
+//     // case PrinterStatusChangeEvent.EVENT_BATTERY_ENOUGH:
+//     // case PrinterStatusChangeEvent.EVENT_AUTO_RECOVER_ERROR:
+//     // case PrinterStatusChangeEvent.EVENT_UNRECOVERABLE_ERROR:
+//     // case PrinterStatusChangeEvent.EVENT_REMOVAL_DETECT_PAPER:
+//     // case PrinterStatusChangeEvent.EVENT_REMOVAL_DETECT_PAPER_NONE:
+//     // case PrinterStatusChangeEvent.EVENT_REMOVAL_DETECT_UNKNOWN:
+//     default:
+//       status = await this.getStatus();
+//   }
+// });
