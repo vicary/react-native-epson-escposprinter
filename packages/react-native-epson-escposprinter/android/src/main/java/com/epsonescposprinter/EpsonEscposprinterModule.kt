@@ -329,8 +329,8 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun getStatus(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching {
-        getPrinter(id, promise)?.apply {
-          getStatus().let { it: PrinterStatusInfo ->
+        getPrinter(id, promise)?.let {
+          it.getStatus().let { it: PrinterStatusInfo ->
             Arguments.createMap().apply {
               putBoolean("connection", it.connection == Printer.TRUE)
 

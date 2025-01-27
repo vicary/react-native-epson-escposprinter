@@ -1,9 +1,10 @@
+import EventEmitter from "eventemitter3";
 import type { EmitterSubscription } from "react-native";
-import {
-  createDeferredIterable,
-  type DeferredIterableIterator,
-} from "./deferred-iterable";
 import { ErrorCode, getEpsonError } from "./errors";
+import {
+  asyncIterableIteratorWithResolvers,
+  type AsyncIterableWithResolvers,
+} from "./iterator";
 import { events, NativeInterface } from "./NativeInterface";
 import { PrinterSeries } from "./PrinterConst";
 
@@ -191,7 +192,12 @@ const cache = new Map<string, DeviceInfo>();
 /**
  * References to active subscribers for sharing the cache.
  */
-const iterators = new Set<DeferredIterableIterator<DeviceInfo>>();
+const iterators = new Set<AsyncIterableWithResolvers<DeviceInfo>>();
+
+/**
+ * Reference to active event emitters for sharing the cache.
+ */
+const emitters = new Set<PrinterDiscovery>();
 
 /**
  * Epson's Discovery service requires a manual cooldown after stopping.
@@ -200,66 +206,132 @@ let cooldown: Promise<void> | null = null;
 
 let listener: EmitterSubscription | null = null;
 
-export async function discoverPrinters(
+const discoveryStartSafe = async (
   filter: FilterOptions = {},
   options?: DiscoveryOptions,
+) => {
+  if (iterators.size > 0 || emitters.size > 0) {
+    return;
+  }
+
+  listener?.remove(); // HMR and React dev mode may cause multiple subscriptions
+
+  listener = events.addListener("deviceFound", (info: DeviceInfo) => {
+    for (const it of iterators) {
+      it.push(info);
+    }
+
+    for (const it of emitters) {
+      it.emit("deviceFound", info);
+    }
+
+    // [ ] Handles dedupe on network identity conflicts
+    cache.set(info.target, info);
+  });
+
+  // Let previous stop action to finish before starting a new one.
+  await cooldown;
+
+  if (options?.verbose) {
+    console.debug(`Starting discovery service...`);
+  }
+
+  await NativeInterface.discoveryStart(filter);
+};
+
+const discoveryStop = async (options?: DiscoveryOptions) => {
+  if (iterators.size > 0 || emitters.size > 0) {
+    return;
+  }
+
+  if (!listener) {
+    return;
+  }
+
+  listener.remove();
+  listener = null;
+
+  if (options?.verbose) {
+    console.debug(`Stopping discovery service...`);
+  }
+
+  cooldown = NativeInterface.discoveryStop()
+    .then(() => new Promise<void>((r) => setTimeout(r, 100)))
+    .then(() => {
+      cache.clear();
+      cooldown = null;
+    });
+
+  return cooldown;
+};
+
+/**
+ * Event emitter implementation of the printer discovery service.
+ */
+export class PrinterDiscovery
+  extends EventEmitter<{
+    deviceFound: [DeviceInfo];
+  }>
+  implements AsyncDisposable
+{
+  #startPromise: Promise<void> | null = null;
+
+  constructor(filter?: FilterOptions, readonly options?: DiscoveryOptions) {
+    super();
+
+    this.#startPromise = discoveryStartSafe(filter, options);
+
+    emitters.add(this);
+  }
+
+  async dispose() {
+    await this.#startPromise;
+
+    emitters.delete(this);
+
+    if (emitters.size === 0) {
+      try {
+        await discoveryStop(this.options);
+      } catch (error) {
+        throw getEpsonError(error) || error;
+      }
+    }
+  }
+
+  [Symbol.asyncDispose]() {
+    return this.dispose();
+  }
+}
+
+/**
+ * Asynchronous iterator for discovered printers.
+ */
+export async function discoverPrinters(
+  filter?: FilterOptions,
+  options?: DiscoveryOptions,
 ) {
-  const iterator = createDeferredIterable<DeviceInfo>({
+  const iterator = asyncIterableIteratorWithResolvers<DeviceInfo>({
     dispose: async () => {
       iterators.delete(iterator);
 
-      if (iterators.size === 0) {
-        try {
-          if (options?.verbose) {
-            console.debug(`Stopping discovery service...`);
-          }
-
-          listener?.remove();
-          listener = null;
-
-          cooldown = NativeInterface.discoveryStop()
-            .then(() => new Promise<void>((r) => setTimeout(r, 100)))
-            .then(() => {
-              cache.clear();
-              cooldown = null;
-            });
-        } catch (error) {
-          throw getEpsonError(error) ?? error;
-        }
+      try {
+        await discoveryStop(options);
+      } catch (error) {
+        throw getEpsonError(error) || error;
       }
     },
   });
 
   try {
-    if (iterators.size === 0) {
-      listener?.remove(); // HMR may cause multiple subscriptions?
-      listener = events.addListener(
-        "deviceFound",
-        (info: DeviceInfo) => {
-          for (const it of iterators) {
-            it.push(info);
-          }
-
-          cache.set(info.target, info);
-        },
-      );
-
-      // Let previous stop action to finsih before starting a new one.
-      await cooldown;
-
-      if (options?.verbose) {
-        console.debug(`Starting discovery service...`);
-      }
-
-      await NativeInterface.discoveryStart(filter);
-    }
+    await discoveryStartSafe(filter, options);
   } catch (error) {
-    throw getEpsonError(error, {
-      [ErrorCode.ERR_ILLEGAL]:
-        `- Tried to start search when search had been already done.
+    throw (
+      getEpsonError(error, {
+        [ErrorCode.ERR_ILLEGAL]: `- Tried to start search when search had been already done.
 - Bluetooth is OFF.
 - There is no permission for the position information.`,
-    }) ?? error;
+      }) || error
+    );
   }
 
   for (const value of cache.values()) {

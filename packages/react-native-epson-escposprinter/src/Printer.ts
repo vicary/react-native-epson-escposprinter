@@ -39,10 +39,8 @@ import type {
 
 const printers = new Map<number, Printer>();
 
-events.addListener(
-  "statusChange",
-  ({ printerId, status } = {}) =>
-    printers.get(printerId)?.emit("statusChange", status),
+events.addListener("statusChange", ({ printerId, status } = {}) =>
+  printers.get(printerId)?.emit("statusChange", status),
 );
 
 events.addListener(
@@ -53,10 +51,8 @@ events.addListener(
       ?.emit("printStatusChange", code, status, printJobId),
 );
 
-events.addListener(
-  "updateProgress",
-  ({ printerId, task, progress } = {}) =>
-    printers.get(printerId)?.emit("updateProgress", task, progress),
+events.addListener("updateProgress", ({ printerId, task, progress } = {}) =>
+  printers.get(printerId)?.emit("updateProgress", task, progress),
 );
 
 /**
@@ -75,7 +71,7 @@ export async function connect(
       series,
       lang,
       target,
-      timeout ?? Printer.PARAM_DEFAULT,
+      timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
     );
 
     const printer = new Printer(printerId);
@@ -84,14 +80,14 @@ export async function connect(
 
     return printer;
   } catch (error) {
-    throw getEpsonError(error, {
-      [ErrorCode.ERR_ILLEGAL]:
-        "Tried to start communication with a printer with which communication had been already established.",
-    }) ?? error;
+    throw (
+      getEpsonError(error, {
+        [ErrorCode.ERR_ILLEGAL]:
+          "Tried to start communication with a printer with which communication had been already established.",
+      }) || error
+    );
   }
 }
-
-// [ ] Triage native events to javascript class instances. (use weak references for reverse id lookup)
 
 abstract class CommonPrinter extends EventEmitter<{
   // [ ] Refactor native events into more javascript-like implementations.
@@ -107,6 +103,7 @@ abstract class CommonPrinter extends EventEmitter<{
     printJobId?: string,
   ];
   updateProgress: [task: string, progress: number];
+  disconnect: [];
 }> {
   public static TRUE = 1;
   public static FALSE = 0;
@@ -185,11 +182,15 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
       await NativeInterface.disconnect(this.#id);
 
       printers.delete(this.#id);
+
+      this.emit("disconnect");
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]:
-          "Tried to end communication where it had not been established.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "Tried to end communication where it had not been established.",
+        }) || error
+      );
     }
   }
 
@@ -200,7 +201,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
 
       return info as PrinterStatus;
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -216,12 +217,15 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.sendData(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]: "The control commands have not been buffered.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "The control commands have not been buffered.",
+        }) || error
+      );
     }
   }
 
@@ -238,10 +242,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.beginTransaction(this.#id);
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]:
-          "Another transaction had been already started by this function.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "Another transaction had been already started by this function.",
+        }) || error
+      );
     }
   }
 
@@ -258,10 +264,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.endTransaction(this.#id);
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]:
-          "This API was called while no transaction had been started.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_ILLEGAL]:
+            "This API was called while no transaction had been started.",
+        }) || error
+      );
     }
   }
 
@@ -285,9 +293,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.requestPrintJobStatus(this.#id, printJobId);
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_CONNECT]: "Communication error",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_CONNECT]: "Communication error",
+        }) || error
+      );
     }
   }
 
@@ -301,7 +311,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.clearCommandBuffer(this.#id);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -319,10 +329,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addTextAlign(
         this.#id,
-        align ?? Printer.PARAM_DEFAULT,
+        align !== undefined ? align : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -343,7 +353,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(255, lineSpace)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -366,7 +376,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         rotate ? Printer.TRUE : Printer.FALSE,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -396,7 +406,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addText(this.#id, text);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -418,10 +428,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addTextLang(
         this.#id,
-        lang ?? Printer.PARAM_DEFAULT,
+        lang !== undefined ? lang : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -435,10 +445,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addTextFont(
         this.#id,
-        font ?? Printer.PARAM_DEFAULT,
+        font !== undefined ? font : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -452,7 +462,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         smooth ? Printer.TRUE : Printer.FALSE,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -477,7 +487,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(1, Math.min(8, height)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -503,10 +513,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         reverse ? Printer.TRUE : Printer.FALSE,
         ul ? Printer.TRUE : Printer.FALSE,
         em ? Printer.TRUE : Printer.FALSE,
-        color ?? Printer.PARAM_DEFAULT,
+        color !== undefined ? color : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -532,7 +542,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(65535, x)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -552,7 +562,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(255, unit)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -572,7 +582,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(255, line)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -652,16 +662,16 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(65534, y)),
         Math.max(1, Math.min(65535, width)),
         Math.max(1, Math.min(65535, height)),
-        color ?? Printer.PARAM_DEFAULT,
-        mode ?? Printer.PARAM_DEFAULT,
-        halftone ?? Printer.PARAM_DEFAULT,
+        color !== undefined ? color : Printer.PARAM_DEFAULT,
+        mode !== undefined ? mode : Printer.PARAM_DEFAULT,
+        halftone !== undefined ? halftone : Printer.PARAM_DEFAULT,
         brightness
           ? Math.max(0, Math.min(10, brightness))
           : Printer.PARAM_DEFAULT,
-        compress ?? Printer.PARAM_DEFAULT,
+        compress !== undefined ? compress : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -692,10 +702,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
       return await NativeInterface.addLogo(
         this.#id,
         key1,
-        key2 ?? Printer.PARAM_DEFAULT,
+        key2 !== undefined ? key2 : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -746,7 +756,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(1, Math.min(255, height)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -815,7 +825,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(65535, size)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -833,10 +843,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         this.#id,
         Math.max(0, Math.min(65535, x1)),
         Math.max(0, Math.min(65535, x2)),
-        lineStyle ?? Printer.PARAM_DEFAULT,
+        lineStyle !== undefined ? lineStyle : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -861,10 +871,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
       return await NativeInterface.addVLineBegin(
         this.#id,
         Math.max(0, Math.min(65535, x)),
-        lineStyle ?? Printer.PARAM_DEFAULT,
+        lineStyle !== undefined ? lineStyle : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -882,7 +892,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addVLineEnd(this.#id, lineId);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -900,7 +910,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addPageBegin(this.#id);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -916,7 +926,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addPageEnd(this.#id);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -954,7 +964,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(1, Math.min(65535, height)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -973,10 +983,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addPageDirection(
         this.#id,
-        direction ?? Printer.PARAM_DEFAULT,
+        direction !== undefined ? direction : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1005,7 +1015,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(65535, y)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1032,10 +1042,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(65535, y1)),
         Math.max(0, Math.min(65535, x2)),
         Math.max(0, Math.min(65535, y2)),
-        style ?? Printer.PARAM_DEFAULT,
+        style !== undefined ? style : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1061,10 +1071,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(65535, y1)),
         Math.max(0, Math.min(65535, x2)),
         Math.max(0, Math.min(65535, y2)),
-        style ?? Printer.PARAM_DEFAULT,
+        style !== undefined ? style : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1119,7 +1129,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addRotateBegin(this.#id);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1134,7 +1144,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addRotateEnd(this.#id);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1162,10 +1172,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addCut(
         this.#id,
-        type ?? Printer.PARAM_DEFAULT,
+        type !== undefined ? type : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1195,11 +1205,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addPulse(
         this.#id,
-        drawer ?? Printer.PARAM_DEFAULT,
-        time ?? Printer.PARAM_DEFAULT,
+        drawer !== undefined ? drawer : Printer.PARAM_DEFAULT,
+        time !== undefined ? time : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1231,12 +1241,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addSound(
         this.#id,
-        pattern ?? Printer.PARAM_DEFAULT,
+        pattern !== undefined ? pattern : Printer.PARAM_DEFAULT,
         repeat ? Math.max(0, Math.min(255, repeat)) : Printer.PARAM_DEFAULT,
         cycle ? Math.max(1000, Math.min(25500, cycle)) : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1252,7 +1262,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addFeedPosition(this.#id, position);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1313,7 +1323,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         Math.max(0, Math.min(10000, offsetLabel)),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1337,7 +1347,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.addCommand(this.#id, command);
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1351,11 +1361,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.getMaintenanceCounter(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
         type,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1372,11 +1382,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.resetMaintenanceCounter(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
         type,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1390,13 +1400,13 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       const ret = await NativeInterface.getPrinterSetting(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
         type,
       );
 
       return ret as PrinterSettingValue;
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1413,11 +1423,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.setPrinterSetting(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
         settings,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1428,12 +1438,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       const ret = await NativeInterface.getPrinterSettingEx(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
 
       return ret as PrinterSettings;
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1474,12 +1484,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.setPrinterSettingEx(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
         JSON.stringify({ Setting: settings }),
         password,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1501,15 +1511,17 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       const ret = await NativeInterface.verifyPassword(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
         password,
       );
 
       return ret as CallbackCode;
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_CONNECT]: "Communication with the server failed.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_CONNECT]: "Communication with the server failed.",
+        }) || error
+      );
     }
   }
 
@@ -1524,12 +1536,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       const ret = await NativeInterface.getPrinterInformation(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
 
       return ret as PrinterInformation;
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1540,12 +1552,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       const ret = await NativeInterface.getPrinterFirmwareInfo(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
 
       return ret as PrinterFirmwareInfomation;
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1567,7 +1579,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         JSON.stringify(targetFirmwareInfo),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1581,10 +1593,12 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
 
       return ret as PrinterFirmwareInfomation[];
     } catch (error) {
-      throw getEpsonError(error, {
-        [ErrorCode.ERR_PARAM]:
-          "- An invalid parameter was passed.\n - This API was called before updateFirmware was executed.",
-      }) ?? error;
+      throw (
+        getEpsonError(error, {
+          [ErrorCode.ERR_PARAM]:
+            "- An invalid parameter was passed.\n - This API was called before updateFirmware was executed.",
+        }) || error
+      );
     }
   }
 
@@ -1611,7 +1625,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         JSON.stringify(firmwareInfo),
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1633,10 +1647,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.forceRecover(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1659,11 +1673,11 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
       return await NativeInterface.forcePulse(
         this.#id,
         drawer,
-        time ?? Printer.PARAM_DEFAULT,
-        timeout ?? Printer.PARAM_DEFAULT,
+        time !== undefined ? time : Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1681,10 +1695,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.forceStopSound(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1705,10 +1719,10 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
       return await NativeInterface.forceCommand(
         this.#id,
         data,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
 
@@ -1724,37 +1738,109 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     try {
       return await NativeInterface.forceReset(
         this.#id,
-        timeout ?? Printer.PARAM_DEFAULT,
+        timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
     } catch (error) {
-      throw getEpsonError(error) ?? error;
+      throw getEpsonError(error) || error;
     }
   }
+
+  #mutex: Promise<unknown> = Promise.resolve();
 
   /**
    * Sending print data in the callback as a single transaction.
    */
   async transaction(callback: (printer: Printer) => Promise<void>) {
-    await this.beginTransaction();
-    await callback(this);
-    await this.endTransaction();
+    this.#mutex = this.#mutex.then(async () => {
+      await this.beginTransaction();
+      await callback(this);
+      await this.endTransaction();
+    });
+
+    await this.#mutex;
   }
 
   /**
    * Sending print data in the callback as a single rotate batch.
    */
   async rotate(callback: (printer: Printer) => Promise<void>) {
-    await this.addRotateBegin();
-    await callback(this);
-    await this.addRotateEnd();
+    this.#mutex = this.#mutex.then(async () => {
+      await this.addRotateBegin();
+      await callback(this);
+      await this.addRotateEnd();
+    });
+
+    await this.#mutex;
   }
 
   /**
    * Sending print data in the callback as a single page.
    */
   async page(callback: (printer: Printer) => Promise<void>) {
-    await this.addPageBegin();
-    await callback(this);
-    await this.addPageEnd();
+    this.#mutex = this.#mutex.then(async () => {
+      await this.addPageBegin();
+      await callback(this);
+      await this.addPageEnd();
+    });
+
+    await this.#mutex;
   }
 }
+
+// For future use: incremental status change
+//
+// this.on("statusChange", async (event) => {
+//   switch (event) {
+//     case PrinterStatusChangeEvent.EVENT_ONLINE:
+//       status.online = true;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_OFFLINE:
+//       status.online = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_POWER_OFF:
+//       status.connection = false;
+//       status.online = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_COVER_CLOSE:
+//       status.coverOpen = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_COVER_OPEN:
+//       status.coverOpen = true;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_PAPER_OK:
+//       status.paper = PrinterPaperStatus.PAPER_OK;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_PAPER_NEAR_END:
+//       status.paper = PrinterPaperStatus.PAPER_NEAR_END;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_PAPER_EMPTY:
+//       status.paper = PrinterPaperStatus.PAPER_EMPTY;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_DRAWER_HIGH:
+//       status.drawer = PrinterDrawerStatus.DRAWER_HIGH;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_DRAWER_LOW:
+//       status.drawer = PrinterDrawerStatus.DRAWER_LOW;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_BATTERY_EMPTY:
+//       status.batteryLevel = PrinterBatteryLevelStatus.BATTERY_LEVEL_0;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_REMOVAL_WAIT_PAPER:
+//       status.removalWaiting = true;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_REMOVAL_WAIT_NONE:
+//       status.removalWaiting = false;
+//       break;
+//     case PrinterStatusChangeEvent.EVENT_AUTO_RECOVER_OK:
+//       status.autoRecoverError = undefined;
+//       break;
+//     // case PrinterStatusChangeEvent.EVENT_BATTERY_ENOUGH:
+//     // case PrinterStatusChangeEvent.EVENT_AUTO_RECOVER_ERROR:
+//     // case PrinterStatusChangeEvent.EVENT_UNRECOVERABLE_ERROR:
+//     // case PrinterStatusChangeEvent.EVENT_REMOVAL_DETECT_PAPER:
+//     // case PrinterStatusChangeEvent.EVENT_REMOVAL_DETECT_PAPER_NONE:
+//     // case PrinterStatusChangeEvent.EVENT_REMOVAL_DETECT_UNKNOWN:
+//     default:
+//       status = await this.getStatus();
+//   }
+// });
