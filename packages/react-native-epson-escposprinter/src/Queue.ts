@@ -61,18 +61,27 @@ export class Queue<T extends NonNullable<unknown> | null> {
    * @returns A promise that resolves to the next item in the queue.
    */
   async pop({ signal }: { signal?: AbortSignal } = {}): Promise<T> {
-    while (true) {
+    let saneMax = 1000;
+
+    while (--saneMax > 0) {
       signal?.throwIfAborted();
+
       const value = this.#items.shift();
       if (value !== undefined) {
         return value;
       }
+
       const { promise, resolve, reject } = Promise.withResolvers<void>();
+
       signal?.addEventListener("abort", () => reject(signal.reason), {
         once: true,
       });
+
       this.#resolves.push(resolve);
+
       await promise;
     }
+
+    throw new Error("Maximum iterations reached");
   }
 }

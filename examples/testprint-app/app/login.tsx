@@ -1,6 +1,6 @@
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { TextInput } from "@/components/TextInput";
-import { useMutation } from "@/gqty";
+import { client, useMutation } from "@/gqty";
 import { useRouter } from "expo-router";
 import type { FunctionComponent } from "react";
 import React, { useState } from "react";
@@ -84,6 +84,9 @@ const Login: FunctionComponent = () => {
             disabled={isLoading || isValidating || isSubmitting}
             onPress={handleSubmit(async ({ uid, pwd }) => {
               const token = await login({ args: { uid, pwd } });
+
+              // Avoid the cached value of query.me: null
+              client.cache.clear();
 
               setToken(token);
             })}

@@ -22,7 +22,7 @@ class EpsonEscposprinterPackage : TurboReactPackage() {
         EpsonEscposprinterModule.NAME,
         false,  // canOverrideExistingModule
         false,  // needsEagerInit
-        // true,  // hasConstants
+        true,  // hasConstants - deprecated signature required for RN 0.67
         false,  // isCxxModule
         BuildConfig.IS_NEW_ARCHITECTURE_ENABLED  // isTurboModule
       )

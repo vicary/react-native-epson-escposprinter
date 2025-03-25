@@ -46,14 +46,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-font",
     "expo-router",
     "expo-sqlite",
-    "react-native-epson-escposprinter",
-    [
-      "expo-build-properties",
-      {
-        ios: { newArchEnabled },
-        android: { newArchEnabled },
-      },
-    ],
     [
       "expo-dev-launcher",
       {
@@ -61,6 +53,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
   ],
+  newArchEnabled,
   experiments: {
     turboModules: newArchEnabled,
     typedRoutes: true,

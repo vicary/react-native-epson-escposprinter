@@ -4,7 +4,10 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*", "./lib/*"]
+      "@/*": [
+        "./*",
+        "./lib/*"
+      ]
     },
     "strict": true,
     "moduleResolution": "bundler"
@@ -12,8 +15,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    "nativewind-env.d.ts",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts"
+    "expo-env.d.ts"
   ]
 }
