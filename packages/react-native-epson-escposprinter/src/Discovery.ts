@@ -180,6 +180,12 @@ export const getPrinterSeriesFromDeviceName = (
   }
 };
 
+const discoveryErrors = {
+  [ErrorCode.ERR_ILLEGAL]: `- Tried to start search when search had been already done.
+- Bluetooth is OFF.
+- There is no permission for the position information.`,
+};
+
 /**
  * A cache of discovered devices.
  *
@@ -293,7 +299,7 @@ export class PrinterDiscovery
       try {
         await discoveryStop(this.options);
       } catch (error) {
-        throw getEpsonError(error) || error;
+        throw getEpsonError(error, discoveryErrors) || error;
       }
     }
   }
@@ -317,7 +323,7 @@ export async function discoverPrinters(
       try {
         await discoveryStop(options);
       } catch (error) {
-        throw getEpsonError(error) || error;
+        throw getEpsonError(error, discoveryErrors) || error;
       }
     },
   });
@@ -325,13 +331,7 @@ export async function discoverPrinters(
   try {
     await discoveryStartSafe(filter, options);
   } catch (error) {
-    throw (
-      getEpsonError(error, {
-        [ErrorCode.ERR_ILLEGAL]: `- Tried to start search when search had been already done.
-- Bluetooth is OFF.
-- There is no permission for the position information.`,
-      }) || error
-    );
+    throw getEpsonError(error, discoveryErrors) || error;
   }
 
   for (const value of cache.values()) {
