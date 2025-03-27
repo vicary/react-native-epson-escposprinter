@@ -1,5 +1,6 @@
 import { useIsHermes } from "@/hooks/useIsHermes";
 import { useNewArchitecture } from "@/hooks/useNewArchitecture";
+import { useTestPrint } from "@/hooks/useTestPrint";
 import React, { FunctionComponent, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,75 +12,10 @@ import {
   View,
 } from "react-native";
 import {
-  connect,
   DeviceInfo,
   discoverPrinters,
   FilterDeviceType,
-  getPrinterSeriesFromDeviceName,
-  PrinterAlign,
-  PrinterCutType,
-  PrinterFont,
-  PrinterLanguage,
-  PrinterLocale,
-  PrinterSymbolLevelQrcode,
-  PrinterSymbolTypeQrcode,
 } from "react-native-epson-escposprinter";
-
-const testPage = async (device: DeviceInfo) => {
-  const series = getPrinterSeriesFromDeviceName(device.deviceName);
-  if (!series) {
-    throw new Error(`Unsupported printer: ${device.deviceName}`);
-  }
-
-  const printer = await connect(
-    series,
-    PrinterLocale.MODEL_ANK,
-    device.target,
-  );
-  console.log("✅ connected:", device.target);
-
-  try {
-    const info = await printer.getPrinterInformation();
-    console.log("✅ status", info);
-
-    await printer.addTextLang(PrinterLanguage.LANG_ZH_TW);
-    await printer.addTextAlign(PrinterAlign.ALIGN_LEFT);
-    await printer.addTextFont(PrinterFont.FONT_A);
-
-    for (
-      const [width, height] of [
-        [1, 1],
-        [2, 3],
-        [3, 4],
-        [4, 5],
-        [5, 6],
-        [6, 7],
-        [7, 8],
-      ]
-    ) {
-      await printer.addTextSize(width, height);
-      await printer.addText("Hello World!你好世界！\n");
-    }
-
-    await printer.addSymbol(
-      "https://www.google.com",
-      PrinterSymbolTypeQrcode.SYMBOL_QRCODE_MODEL_1,
-      PrinterSymbolLevelQrcode.LEVEL_H,
-      10,
-    );
-    // await printer.sendData();
-    console.log("✅ printText");
-
-    await printer.addCut(PrinterCutType.CUT_FEED);
-    console.log("✅ cutPaper");
-
-    await printer.sendData();
-    await printer.clearCommandBuffer();
-  } finally {
-    await printer.disconnect();
-    console.log("✅ disconnect");
-  }
-};
 
 const Home: FunctionComponent = () => {
   const isFabric = useNewArchitecture();
@@ -127,7 +63,7 @@ const Home: FunctionComponent = () => {
         contentInsetAdjustmentBehavior="automatic"
         className="min-h-screen"
       >
-        <View className="px-3 py-10 h-full flex gap-3">
+        <View className="flex h-full gap-3 px-3 py-10">
           <Text className="text-2xl font-bold">TestPrint</Text>
 
           <View>
@@ -160,19 +96,19 @@ const Home: FunctionComponent = () => {
   );
 };
 
-const PrinterCard: FunctionComponent<{ device: DeviceInfo }> = (
-  { device },
-) => {
+const PrinterCard: FunctionComponent<{ device: DeviceInfo }> = ({ device }) => {
   const [printing, setPrinting] = useState(false);
+  const testPrint = useTestPrint();
 
   return (
     <Pressable
-      className="bg-gray-200 active:bg-gray-300 active:opacity-50 rounded-xl w-60"
+      className="w-60 rounded-xl bg-gray-200 active:bg-gray-300
+        active:opacity-50"
       onPress={async () => {
         try {
           setPrinting(true);
 
-          await testPage(device);
+          await testPrint(device);
         } catch (e) {
           console.error(e);
         } finally {
@@ -180,7 +116,7 @@ const PrinterCard: FunctionComponent<{ device: DeviceInfo }> = (
         }
       }}
     >
-      <View className="p-4 flex flex-col justify-between">
+      <View className="flex flex-col justify-between p-4">
         <View className={printing ? "opacity-20" : ""}>
           <Text className="color-black">{device.deviceName}</Text>
 
@@ -209,7 +145,7 @@ const PrinterCard: FunctionComponent<{ device: DeviceInfo }> = (
           <ActivityIndicator
             size="small"
             color="blue"
-            className="absolute top-0 left-0 bottom-0 right-0"
+            className="absolute bottom-0 left-0 right-0 top-0"
           />
         )}
       </View>

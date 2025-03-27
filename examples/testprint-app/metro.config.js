@@ -16,4 +16,6 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
+config.resolver.unstable_enablePackageExports = true;
+
 module.exports = withNativeWind(config, { input: "app/global.css" });
