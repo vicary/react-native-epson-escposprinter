@@ -1,10 +1,10 @@
 import EventEmitter from "eventemitter3";
 import type { EmitterSubscription } from "react-native";
-import { ErrorCode, getEpsonError } from "./errors";
 import {
   asyncIterableIteratorWithResolvers,
   type AsyncIterableWithResolvers,
-} from "./iterator";
+} from "./asyncIterator";
+import { ErrorCode, getEpsonError } from "./errors";
 import { events, NativeInterface } from "./NativeInterface";
 import { PrinterSeries } from "./PrinterConst";
 
@@ -212,7 +212,7 @@ let cooldown: Promise<void> | null = null;
 
 let listener: EmitterSubscription | null = null;
 
-const discoveryStartSafe = async (
+const discoveryStart = async (
   filter: FilterOptions = {},
   options?: DiscoveryOptions,
 ) => {
@@ -242,7 +242,11 @@ const discoveryStartSafe = async (
     console.debug(`Starting discovery service...`);
   }
 
-  await NativeInterface.discoveryStart(filter);
+  try {
+    await NativeInterface.discoveryStart(filter);
+  } catch (error) {
+    throw getEpsonError(error, discoveryErrors) || error;
+  }
 };
 
 const discoveryStop = async (options?: DiscoveryOptions) => {
@@ -262,8 +266,13 @@ const discoveryStop = async (options?: DiscoveryOptions) => {
   }
 
   cooldown = NativeInterface.discoveryStop()
-    .then(() => new Promise<void>((r) => setTimeout(r, 100)))
-    .then(() => {
+    .then(
+      () => new Promise<void>((r) => setTimeout(r, 100)),
+      (error) => {
+        throw getEpsonError(error) || error;
+      },
+    )
+    .finally(() => {
       cache.clear();
       cooldown = null;
     });
@@ -282,10 +291,13 @@ export class PrinterDiscovery
 {
   #startPromise: Promise<void> | null = null;
 
-  constructor(filter?: FilterOptions, readonly options?: DiscoveryOptions) {
+  constructor(
+    filter?: FilterOptions,
+    readonly options?: DiscoveryOptions,
+  ) {
     super();
 
-    this.#startPromise = discoveryStartSafe(filter, options);
+    this.#startPromise = discoveryStart(filter, options);
 
     emitters.add(this);
   }
@@ -295,13 +307,7 @@ export class PrinterDiscovery
 
     emitters.delete(this);
 
-    if (emitters.size === 0) {
-      try {
-        await discoveryStop(this.options);
-      } catch (error) {
-        throw getEpsonError(error, discoveryErrors) || error;
-      }
-    }
+    await discoveryStop(this.options);
   }
 
   [Symbol.asyncDispose]() {
@@ -316,23 +322,21 @@ export async function discoverPrinters(
   filter?: FilterOptions,
   options?: DiscoveryOptions,
 ) {
+  if (Symbol.asyncIterator === undefined) {
+    throw new Error(
+      `AsyncIterator is not supported in your runtime, try PrinterDiscovery instead.`,
+    );
+  }
+
   const iterator = asyncIterableIteratorWithResolvers<DeviceInfo>({
     dispose: async () => {
       iterators.delete(iterator);
 
-      try {
-        await discoveryStop(options);
-      } catch (error) {
-        throw getEpsonError(error, discoveryErrors) || error;
-      }
+      await discoveryStop(options);
     },
   });
 
-  try {
-    await discoveryStartSafe(filter, options);
-  } catch (error) {
-    throw getEpsonError(error, discoveryErrors) || error;
-  }
+  await discoveryStart(filter, options);
 
   for (const value of cache.values()) {
     iterator.push(value);

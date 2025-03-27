@@ -66,9 +66,8 @@ export class Queue<T extends NonNullable<unknown> | null> {
    * @returns A promise that resolves to the next item in the queue.
    */
   async pop({ signal }: { signal?: AbortSignal } = {}): Promise<T> {
-    let saneMax = 1000;
-
-    while (--saneMax > 0) {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       signal?.throwIfAborted();
 
       const value = this.#items.shift();
@@ -86,7 +85,5 @@ export class Queue<T extends NonNullable<unknown> | null> {
 
       await promise;
     }
-
-    throw new Error("Maximum iterations reached");
   }
 }

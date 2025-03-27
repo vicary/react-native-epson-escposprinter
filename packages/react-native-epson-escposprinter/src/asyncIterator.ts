@@ -4,8 +4,6 @@ import { Queue } from "./Queue";
 /** Indicates the iterator is still in active state. */
 const returnSymbol = Symbol.for("AsyncIterator.return");
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /**
  * Async iterator with manual resolvers exposed.
  *
@@ -78,7 +76,7 @@ export const asyncIteratorWithResolvers = <
         // Clear pending values
         while (queue.size > 0) {
           if (!force) {
-            await delay(100);
+            await new Promise((resolve) => setTimeout(resolve, 100));
           } else {
             await queue.pop();
           }
@@ -153,6 +151,10 @@ export const asyncIterableIteratorWithResolvers = <
 >(
   options?: AsyncIteratorWithResolversOptions,
 ): AsyncIterableWithResolvers<T, TReturn, TNext> => {
+  if (Symbol.asyncIterator === undefined) {
+    throw new Error(`AsyncIterator is not supported.`);
+  }
+
   const iterator = asyncIteratorWithResolvers<T, TReturn, TNext>(options);
 
   return {
