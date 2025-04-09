@@ -15,7 +15,7 @@ import type {
   PrinterCompress,
   PrinterCutType,
   PrinterFeedPosition,
-  PrinterFirmwareInfomation,
+  PrinterFirmwareInformation,
   PrinterFont,
   PrinterHalftone,
   PrinterInformation,
@@ -23,7 +23,7 @@ import type {
   PrinterLayoutType,
   PrinterLineStyle,
   PrinterLocale,
-  PrinterMaintainenceCounterType,
+  PrinterMaintenanceCounterType,
   PrinterPageDirection,
   PrinterPulseDrawer,
   PrinterPulseTime,
@@ -1453,7 +1453,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * Acquires the value of the printer's maintenance counter.
    */
   async getMaintenanceCounter(
-    type: PrinterMaintainenceCounterType,
+    type: PrinterMaintenanceCounterType,
     timeout?: number,
   ) {
     this.#ensureConnected();
@@ -1476,7 +1476,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * in the listener parameter.
    */
   async resetMaintenanceCounter(
-    type: PrinterMaintainenceCounterType,
+    type: PrinterMaintenanceCounterType,
     timeout?: number,
   ) {
     this.#ensureConnected();
@@ -1671,7 +1671,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         timeout !== undefined ? timeout : Printer.PARAM_DEFAULT,
       );
 
-      return ret as PrinterFirmwareInfomation;
+      return ret as PrinterFirmwareInformation;
     } catch (error) {
       throw getEpsonError(error) || error;
     }
@@ -1688,7 +1688,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * The processing result of this API is notified to the listener method
    * specified in the listener parameter.
    */
-  async verifyUpdate(targetFirmwareInfo: PrinterFirmwareInfomation) {
+  async verifyUpdate(targetFirmwareInfo: PrinterFirmwareInformation) {
     this.#ensureConnected();
 
     try {
@@ -1711,7 +1711,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
         option,
       );
 
-      return ret as PrinterFirmwareInfomation[];
+      return ret as PrinterFirmwareInformation[];
     } catch (error) {
       throw (
         getEpsonError(error, {
@@ -1738,7 +1738,7 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    *
    * @returns The maximum waiting time for the firmware update
    */
-  async updateFirmware(firmwareInfo: PrinterFirmwareInfomation) {
+  async updateFirmware(firmwareInfo: PrinterFirmwareInformation) {
     this.#ensureConnected();
 
     try {
