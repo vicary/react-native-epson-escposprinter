@@ -329,67 +329,9 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   override fun getStatus(id: Double, promise: Promise) {
     coroutineScope.launch {
       runCatching {
-        getPrinter(id, promise)?.apply {
-          getStatus().let { it: PrinterStatusInfo ->
-            Arguments.createMap().apply {
-              putBoolean("connection", it.connection == Printer.TRUE)
-
-              it.online
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("online", it == Printer.TRUE) }
-
-              it.coverOpen
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("coverOpen", it == Printer.TRUE) }
-
-              it.paper
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("paper", it) }
-
-              it.paperFeed
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("paperFeed", it == Printer.TRUE) }
-
-              it.panelSwitch
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("panelSwitch", it == Printer.TRUE) }
-
-              it.drawer
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("drawer", it) }
-
-              it.errorStatus
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("errorStatus", it) }
-
-              it.autoRecoverError
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("autoRecoverError", it) }
-
-              it.buzzer
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("buzzer", it == Printer.TRUE) }
-
-              it.adapter
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("adapter", it == Printer.TRUE) }
-
-              it.batteryLevel
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("batteryLevel", it) }
-
-              it.removalWaiting
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putBoolean("removalWaiting", it == Printer.REMOVAL_WAIT_PAPER) }
-
-              it.paperTakenSensor
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("paperTakenSensor", it) }
-
-              it.unrecoverError
-                .takeIf { it != Printer.UNKNOWN }
-                ?.let { putInt("unrecoverError", it) }
-            }
+        getPrinter(id, promise)?.let { it: Printer ->
+          it.getStatus().let { it: PrinterStatusInfo ->
+            statusToObject(it)
           }
         }
       }
