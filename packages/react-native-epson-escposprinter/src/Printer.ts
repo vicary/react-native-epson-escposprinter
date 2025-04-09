@@ -1,5 +1,10 @@
 import EventEmitter from "eventemitter3";
-import { type CallbackCode, ErrorCode, getEpsonError } from "./errors";
+import {
+  type CallbackCode,
+  ErrorCode,
+  getEpsonError,
+  PrinterIllegalError,
+} from "./errors";
 import { events, NativeInterface } from "./NativeInterface";
 import type {
   PrinterAlign,
@@ -174,10 +179,18 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     return this.disconnect();
   }
 
+  #ensureConnected() {
+    if (!printers.has(this.#id)) {
+      throw new PrinterIllegalError();
+    }
+  }
+
   /**
    * Ends communication with the printer.
    */
   async disconnect() {
+    this.#ensureConnected();
+
     try {
       await NativeInterface.disconnect(this.#id);
 
@@ -185,17 +198,24 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
 
       this.emit("disconnect");
     } catch (error) {
-      throw (
+      const printerError =
         getEpsonError(error, {
           [ErrorCode.ERR_ILLEGAL]:
             "Tried to end communication where it had not been established.",
-        }) || error
-      );
+        }) || error;
+
+      if (printerError instanceof PrinterIllegalError) {
+        printers.delete(this.#id);
+      }
+
+      throw printerError;
     }
   }
 
   /** Acquires the current status information. */
   async getStatus() {
+    this.#ensureConnected();
+
     try {
       const info = await NativeInterface.getStatus(this.#id);
 
@@ -214,6 +234,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * This API sends data buffered by an add-type API (e.g., `addText`).
    */
   async sendData(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.sendData(
         this.#id,
@@ -239,6 +261,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * `endTransaction` will be regarded as a single printing task.
    */
   async beginTransaction() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.beginTransaction(this.#id);
     } catch (error) {
@@ -261,6 +285,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * terminated by this API will be regarded as a single printing task.
    */
   async endTransaction() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.endTransaction(this.#id);
     } catch (error) {
@@ -290,6 +316,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
      */
     printJobId: string,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.requestPrintJobStatus(this.#id, printJobId);
     } catch (error) {
@@ -308,6 +336,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * called.
    */
   async clearCommandBuffer() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.clearCommandBuffer(this.#id);
     } catch (error) {
@@ -326,6 +356,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * of this API.
    */
   async addTextAlign(align?: PrinterAlign) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextAlign(
         this.#id,
@@ -347,6 +379,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the line spacing (in dots). */
     lineSpace: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addLineSpace(
         this.#id,
@@ -370,6 +404,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the text rotation. */
     rotate?: boolean,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextRotate(
         this.#id,
@@ -403,6 +439,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
      */
     text: string,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addText(this.#id, text);
     } catch (error) {
@@ -425,6 +463,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the language. */
     lang?: PrinterLanguage,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextLang(
         this.#id,
@@ -442,6 +482,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the font. */
     font?: PrinterFont,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextFont(
         this.#id,
@@ -456,6 +498,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * Adds smoothing setting to the command buffer.
    */
   async addTextSmooth(smooth?: boolean) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextSmooth(
         this.#id,
@@ -480,6 +524,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the height scaling factor. */
     height: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextSize(
         this.#id,
@@ -507,6 +553,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the color. */
     color?: PrinterColor,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addTextStyle(
         this.#id,
@@ -536,6 +584,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the horizontal position (in dots). */
     x: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addHPosition(
         this.#id,
@@ -556,6 +606,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the feed amount (in dots). */
     unit: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addFeedUnit(
         this.#id,
@@ -576,6 +628,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the feed amount (in lines). */
     line: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addFeedLine(
         this.#id,
@@ -654,6 +708,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the compress. */
     compress?: PrinterCompress,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addImage(
         this.#id,
@@ -698,6 +754,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the key code 2 of the NV logo. */
     key2?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addLogo(
         this.#id,
@@ -745,6 +803,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the barcode height (in dots). */
     height: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addBarcode(
         this.#id,
@@ -814,6 +874,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     height: number = 0,
     size: number = 0,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addSymbol(
         this.#id,
@@ -838,6 +900,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * - Use addPageLine to draw a horizontal ruled line in the page mode.
    */
   async addHLine(x1: number, x2: number, lineStyle?: PrinterLineStyle) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addHLine(
         this.#id,
@@ -867,6 +931,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     x: number,
     lineStyle?: PrinterLineStyle,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addVLineBegin(
         this.#id,
@@ -889,6 +955,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * - Use this API with the `addVLineBegin` API.
    */
   async addVLineEnd(lineId: number) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addVLineEnd(this.#id, lineId);
     } catch (error) {
@@ -907,6 +975,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    *   it will be ignored.
    */
   async addPageBegin() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPageBegin(this.#id);
     } catch (error) {
@@ -923,6 +993,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * - Use this API with the `addPageBegin` API.
    */
   async addPageEnd() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPageEnd(this.#id);
     } catch (error) {
@@ -955,6 +1027,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the height of a print area (in dots). */
     height: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPageArea(
         this.#id,
@@ -980,6 +1054,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the print direction. */
     direction?: PrinterPageDirection,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPageDirection(
         this.#id,
@@ -1008,6 +1084,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the vertical start position of the print area (in dots). */
     y: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPagePosition(
         this.#id,
@@ -1035,6 +1113,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     y2: number,
     style?: PrinterLineStyle,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPageLine(
         this.#id,
@@ -1064,6 +1144,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     y2: number,
     style?: PrinterLineStyle,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPageRectangle(
         this.#id,
@@ -1126,6 +1208,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    *       - Multi-gradation (16 scales) maximum value: 600 dots
    */
   async addRotateBegin() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addRotateBegin(this.#id);
     } catch (error) {
@@ -1141,6 +1225,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    *   enclosing between this API and the `addRotateBegin` API.
    */
   async addRotateEnd() {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addRotateEnd(this.#id);
     } catch (error) {
@@ -1169,6 +1255,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the cut type. */
     type?: PrinterCutType,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addCut(
         this.#id,
@@ -1202,6 +1290,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Specifies the on time (in milliseconds). */
     time?: PrinterPulseTime,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addPulse(
         this.#id,
@@ -1238,6 +1328,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     /** Effective for Patterns 1 to 10 only. */
     cycle?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addSound(
         this.#id,
@@ -1259,6 +1351,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    *   it will be ignored.
    */
   async addFeedPosition(position: PrinterFeedPosition) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addFeedPosition(this.#id, position);
     } catch (error) {
@@ -1311,6 +1405,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
      */
     offsetLabel: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addLayout(
         this.#id,
@@ -1344,6 +1440,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    *   the receipt printer specifications.
    */
   async addCommand(command: string) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.addCommand(this.#id, command);
     } catch (error) {
@@ -1358,6 +1456,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     type: PrinterMaintainenceCounterType,
     timeout?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.getMaintenanceCounter(
         this.#id,
@@ -1379,6 +1479,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     type: PrinterMaintainenceCounterType,
     timeout?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.resetMaintenanceCounter(
         this.#id,
@@ -1397,6 +1499,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * in the listener parameter.
    */
   async getPrinterSetting(type: PrinterSettingType, timeout?: number) {
+    this.#ensureConnected();
+
     try {
       const ret = await NativeInterface.getPrinterSetting(
         this.#id,
@@ -1420,6 +1524,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     settings: Record<PrinterSettingType, PrinterSettingValue>,
     timeout?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.setPrinterSetting(
         this.#id,
@@ -1435,6 +1541,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * Acquires the set value of the printer setting in JSON format.
    */
   async getPrinterSettingEx(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       const ret = await NativeInterface.getPrinterSettingEx(
         this.#id,
@@ -1481,6 +1589,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     password: string,
     timeout?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.setPrinterSettingEx(
         this.#id,
@@ -1508,6 +1618,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * result with the callback method.
    */
   async verifyPassword(password: string, timeout?: number) {
+    this.#ensureConnected();
+
     try {
       const ret = await NativeInterface.verifyPassword(
         this.#id,
@@ -1533,6 +1645,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * in the listener parameter.
    */
   async getPrinterInformation(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       const ret = await NativeInterface.getPrinterInformation(
         this.#id,
@@ -1549,6 +1663,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * Acquires the firmware information for the connected printer.
    */
   async getPrinterFirmwareInfo(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       const ret = await NativeInterface.getPrinterFirmwareInfo(
         this.#id,
@@ -1573,6 +1689,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * specified in the listener parameter.
    */
   async verifyUpdate(targetFirmwareInfo: PrinterFirmwareInfomation) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.verifyUpdate(
         this.#id,
@@ -1584,6 +1702,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
   }
 
   async downloadFirmwareList(printerModel: string, option: string) {
+    this.#ensureConnected();
+
     try {
       const ret = await NativeInterface.downloadFirmwareList(
         this.#id,
@@ -1619,6 +1739,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * @returns The maximum waiting time for the firmware update
    */
   async updateFirmware(firmwareInfo: PrinterFirmwareInfomation) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.updateFirmware(
         this.#id,
@@ -1644,6 +1766,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * - Available during ePOS-Device XML control.
    */
   async forceRecover(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.forceRecover(
         this.#id,
@@ -1669,6 +1793,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     time?: PrinterPulseTime,
     timeout?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.forcePulse(
         this.#id,
@@ -1692,6 +1818,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * - Available during ePOS-Device XML control.
    */
   async forceStopSound(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.forceStopSound(
         this.#id,
@@ -1715,6 +1843,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
     data: string,
     timeout?: number,
   ) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.forceCommand(
         this.#id,
@@ -1735,6 +1865,8 @@ export class Printer extends CommonPrinter implements AsyncDisposable {
    * - Available during ePOS-Device XML control.
    */
   async forceReset(timeout?: number) {
+    this.#ensureConnected();
+
     try {
       return await NativeInterface.forceReset(
         this.#id,
