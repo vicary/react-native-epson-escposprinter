@@ -2,7 +2,7 @@
 
 import { type TurboModule, TurboModuleRegistry } from "react-native";
 import type {
-  PrinterFirmwareInfomation,
+  PrinterFirmwareInformation,
   PrinterInformation,
   PrinterSettings,
   PrinterStatus,
@@ -226,7 +226,7 @@ export interface Spec extends TurboModule {
   getPrinterFirmwareInfo(
     id: number,
     timeout: number,
-  ): Promise<PrinterFirmwareInfomation>;
+  ): Promise<PrinterFirmwareInformation>;
 
   verifyUpdate(id: number, targetFirmwareInfo: Object): Promise<number>;
 

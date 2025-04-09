@@ -275,7 +275,7 @@ export type PrinterInformation = {
   };
 };
 
-export type PrinterFirmwareInfomation = {
+export type PrinterFirmwareInformation = {
   /**
    * Android only.
    *
@@ -486,7 +486,7 @@ export const enum PrinterLayoutType {
   LAYOUT_RECEIPT_BM = 3,
 }
 
-export const enum PrinterMaintainenceCounterType {
+export const enum PrinterMaintenanceCounterType {
   MAINTENANCE_COUNTER_PAPERFEED = 0,
   MAINTENANCE_COUNTER_AUTOCUTTER = 1,
   MAINTENANCE_COUNTER_OTHER = 2,
