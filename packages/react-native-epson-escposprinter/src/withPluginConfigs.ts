@@ -2,13 +2,13 @@ import {
   type ConfigPlugin,
   createRunOncePlugin,
   withXcodeProject,
-} from "@expo/config-plugins";
+} from "expo/config-plugins";
 
 // @ts-expect-error Output directory is lib/commonjs/ instead of src/
 import { name, version } from "../../package.json";
 
 const withPluginConfigs: ConfigPlugin = (config) => {
-  withXcodeProject(config, (xCodeConfig) => {
+  config = withXcodeProject(config, (xCodeConfig) => {
     const project = xCodeConfig.modResults;
     const target = project.getFirstTarget().uuid;
 

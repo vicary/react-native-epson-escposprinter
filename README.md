@@ -8,8 +8,8 @@ and classic builds.
 
 The current version embeds these SDKs:
 
-1. [Epson ePOS SDK for Android Version 2.29.0a](https://download3.ebz.epson.net/dsc/f/03/00/16/08/02/21f0a82197a53e72a8deb0253146478c7a19babb/ePOS_SDK_Android_v2.29.0a.zip)
-1. [Epson ePOS SDK for iOS Version 2.29.1a](https://download3.ebz.epson.net/dsc/f/03/00/16/08/00/5093ed8b38118fc06ba68bae76770a6cb3cc56e3/ePOS_SDK_iOS_v2.29.1a.zip)
+1. [Epson ePOS SDK for Android Version 2.32.0](https://download3.ebz.epson.net/dsc/f/03/00/17/07/34/7de19987ac4424b34b1ee708f254d7b825526beb/ePOS_SDK_Android_v2.32.0.zip)
+1. [Epson ePOS SDK for iOS Version 2.32.0](https://download3.ebz.epson.net/dsc/f/03/00/17/07/36/4f68b055a1006360f78c585f3c22089beca7a3b1/ePOS_SDK_iOS_v2.32.0.zip)
 
 ## Usage
 

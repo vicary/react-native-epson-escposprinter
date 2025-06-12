@@ -34,6 +34,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#ffffff",
     },
+    edgeToEdgeEnabled: true,
     package: "com.example.testprintapp",
     permissions: ["android.permission.ACCESS_WIFI_STATE"],
   },
@@ -45,13 +46,22 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-font",
     "expo-router",
-    "expo-sqlite",
+    [
+      "expo-sqlite",
+      {
+        useSQLCipher: false,
+        ios: {
+          customBuildFlags: "-DSQLITE_ENABLE_DBSTAT_VTAB=1",
+        },
+      },
+    ],
     [
       "expo-dev-launcher",
       {
         launchMode: "most-recent",
       },
     ],
+    "react-native-epson-escposprinter",
   ],
   newArchEnabled,
   experiments: {

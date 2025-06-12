@@ -63,7 +63,6 @@ yarn-error.*
 
 # macOS
 .DS_Store
-*.pem
 
 # TypeScript cache
 *.tsbuildinfo
@@ -195,8 +194,8 @@ ios/Pods/
 # Expo
 **/.expo/
 **/dist/
-**/ios/
-**/android/
+examples/**/ios/
+examples/**/android/
 **/web-build/
 **/expo-env.d.ts
 

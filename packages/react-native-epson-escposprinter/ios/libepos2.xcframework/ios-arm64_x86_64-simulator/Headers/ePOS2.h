@@ -1,7 +1,7 @@
 //
 //  Copyright (C) Seiko Epson Corporation 2016 - 2024. All rights reserved.
 //
-//  ePOS SDK Ver.2.29.1
+//  ePOS SDK Ver.2.32.0
 
 #ifdef __OBJC__
 #import <Foundation/Foundation.h>
@@ -215,6 +215,7 @@ enum Epos2PrinterSeries : int {
     EPOS2_TM_M50II,
     EPOS2_TM_M55,
     EPOS2_TM_U220II,
+    EPOS2_SB_H50,
 };
 enum Epos2DisplayModel : int {
     EPOS2_DM_D30 = 0,

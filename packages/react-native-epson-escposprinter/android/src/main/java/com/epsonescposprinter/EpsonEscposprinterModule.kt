@@ -3,7 +3,7 @@ package com.epsonescposprinter
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.widget.Toast
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.epson.epos2.discovery.DeviceInfo;
 import com.epson.epos2.discovery.Discovery;
@@ -165,7 +165,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   protected val coroutineScope: CoroutineScope
     get() = getCurrentActivity()
       ?.getCurrentFocus()
-      ?.let { ViewTreeLifecycleOwner.get(it) }
+      ?.findViewTreeLifecycleOwner()
       ?.lifecycleScope
       // [ ] Test concurrency, fallback to GlobalScope on racing conditions
       ?: CoroutineScope(Dispatchers.Default)
