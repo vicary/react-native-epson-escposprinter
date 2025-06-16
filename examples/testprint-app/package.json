@@ -33,8 +33,7 @@
     "useTabs": false
   },
   "jest": {
-    "preset": "jest-expo",
-    "testEnvironment": "jsdom"
+    "preset": "jest-expo"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

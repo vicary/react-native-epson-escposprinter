@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { ThemedText } from "../ThemedText";
 
-it(`renders correctly`, async () => {
+it(`renders correctly`, () => {
   const tree = render(<ThemedText>Snapshot test!</ThemedText>).toJSON();
 
   expect(tree).toMatchSnapshot();

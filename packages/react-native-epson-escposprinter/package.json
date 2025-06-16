@@ -34,6 +34,7 @@
       "types": "./lib/typescript/module/index.d.ts",
       "default": "./lib/module/index.js"
     },
+    "./app.plugin.js": "./app.plugin.js",
     "./package.json": "./package.json"
   },
   "main": "./lib/module/index.js",
@@ -155,8 +156,8 @@
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
-    "react": "^17.0.0 || ^18.0.0 || ^19.0.0",
-    "react-native": "^0.67.0 || ^0.68.0 || ^0.69.0 || ^0.70.0 || ^0.71.0 || ^0.72.0 || ^0.73.0 || ^0.74.0 || ^0.75.0 || ^0.76.0 || ^0.77.0 || ^0.78.0 || ^0.79.0"
+    "react": "^19.0.0",
+    "react-native": "^0.77.0 || ^0.78.0 || ^0.79.0"
   },
   "engines": {
     "node": ">= 16.0.0"
