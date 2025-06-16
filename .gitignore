@@ -192,12 +192,13 @@ buck-out/
 ios/Pods/
 
 # Expo
-**/.expo/
-**/dist/
+examples/**/.expo/
+examples/**/dist/
 examples/**/ios/
 examples/**/android/
-**/web-build/
-**/expo-env.d.ts
+examples/**/web-build/
+examples/**/expo-env.d.ts
+packages/**/android/build/
 
 # Native
 .kotlin/

@@ -157,8 +157,8 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
   }
 
   private val mutex = Mutex()
-  private val printers = ConcurrentHashMap<Int, Printer>()
-  private val printersId = AtomicInteger(0)
+  private val instances = ConcurrentHashMap<Int, Printer>()
+  private val instancesId = AtomicInteger(0)
 
   override fun getName(): String = NAME
 
@@ -171,7 +171,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
       ?: CoroutineScope(Dispatchers.Default)
 
   protected fun getPrinter(id: Double, promise: Promise): Printer? =
-    printers.get(id.toInt())
+    instances.get(id.toInt())
       ?: run {
         promise.reject(
           CODE_ERROR,
@@ -228,7 +228,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           )
         }
         .onSuccess {
-          val printerId = printersId.incrementAndGet()
+          val instanceId = instancesId.incrementAndGet()
 
           it.setStatusChangeEventListener(
             object : StatusChangeListener {
@@ -239,7 +239,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
                 emitEvent(
                   "statusChange",
                   Arguments.createMap().apply {
-                    putInt("printerId", printerId)
+                    putInt("printerId", instanceId)
                     putInt("status", event)
                   }
                 )
@@ -258,7 +258,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
                 emitEvent(
                   "printStatusChange",
                   Arguments.createMap().apply {
-                    putInt("printerId", printerId)
+                    putInt("printerId", instanceId)
                     putInt("code", code)
                     putMap("status", statusToObject(status))
                     printJobId?.let { putString("printJobId", it) }
@@ -270,8 +270,8 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
 
           it.startMonitor()
 
-          printers.set(printerId, it)
-          promise.resolve(printerId)
+          instances.set(instanceId, it)
+          promise.resolve(instanceId)
         }
     }
   }
@@ -319,7 +319,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
           )
         }
         .onSuccess {
-          printers.remove(id.toInt())
+          instances.remove(id.toInt())
           promise.resolve(null)
         }
     }
