@@ -10,8 +10,8 @@ import type { Spec } from "./NativeEpsonEscposprinter";
 const isTurboModuleEnabled = global.__turboModuleProxy != null;
 
 const NativeInterface: Spec = isTurboModuleEnabled
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ? require("./NativeEpsonEscposprinter").default
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("./NativeEpsonEscposprinter").default
   : NativeModules.EpsonEscposprinter;
 
 if (!NativeInterface) {
