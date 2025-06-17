@@ -159,8 +159,6 @@ DerivedData
 *.xcuserstate
 project.xcworkspace
 
-packages/*/lib/
-
 # Android/IntelliJ
 .idea
 .gradle
@@ -192,13 +190,14 @@ buck-out/
 ios/Pods/
 
 # Expo
-examples/**/.expo/
-examples/**/dist/
-examples/**/ios/
-examples/**/android/
-examples/**/web-build/
-examples/**/expo-env.d.ts
-packages/**/android/build/
+workspaces/testprint-app/.expo/
+workspaces/testprint-app/dist/
+workspaces/testprint-app/ios/
+workspaces/testprint-app/android/
+workspaces/testprint-app/web-build/
+workspaces/testprint-app/expo-env.d.ts
+workspaces/*/android/build/
+workspaces/*/lib/
 
 # Native
 .kotlin/

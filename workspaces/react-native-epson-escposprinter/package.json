@@ -31,13 +31,19 @@
   "author": "Vicary A. <vicary.archangel@member.mensa.org> (https://github.com/vicary)",
   "exports": {
     ".": {
-      "types": "./lib/typescript/module/index.d.ts",
-      "default": "./lib/module/index.js"
+      "import": {
+        "types": "./lib/typescript/module/index.d.ts",
+        "default": "./lib/module/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/index.d.ts",
+        "default": "./lib/commonjs/index.js"
+      }
     },
     "./app.plugin.js": "./app.plugin.js",
     "./package.json": "./package.json"
   },
-  "main": "./lib/module/index.js",
+  "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
   "source": "./src/index.ts",
   "types": "./lib/typescript/commonjs/index.d.ts",
@@ -109,7 +115,9 @@
           "fixStyle": "inline-type-imports"
         }
       ],
-      "@typescript-eslint/no-import-type-side-effects": "error"
+      "@typescript-eslint/func-call-spacing": "off",
+      "@typescript-eslint/no-import-type-side-effects": "error",
+      "@typescript-eslint/no-wrapper-object-types": "off"
     },
     "root": true
   },
@@ -137,8 +145,8 @@
     "@react-native/eslint-plugin": "^0.75.2",
     "@types/jest": "^29.5.12",
     "@types/react": "^19.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.34.0",
+    "@typescript-eslint/parser": "^8.34.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-eslint-comments": "^3.2.0",
@@ -174,7 +182,12 @@
     "source": "src",
     "output": "lib",
     "targets": [
-      "commonjs",
+      [
+        "commonjs",
+        {
+          "esm": true
+        }
+      ],
       [
         "module",
         {

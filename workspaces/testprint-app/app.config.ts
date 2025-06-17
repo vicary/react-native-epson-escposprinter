@@ -1,6 +1,8 @@
 import type { ConfigContext, ExpoConfig } from "@expo/config";
+import { pascalCase } from "change-case";
 import { config } from "dotenv";
 import * as path from "node:path";
+import { name, version } from "./package.json";
 
 config({
   path: [
@@ -15,16 +17,14 @@ const newArchEnabled = ["1", "true", "yes", "on", "enabled"].includes(
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "TestPrint",
+  name: pascalCase(name),
   slug: "testprint-app",
+  version,
+  orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "testprint",
   userInterfaceStyle: "automatic",
-  splash: {
-    image: "./assets/images/splash.png",
-    resizeMode: "contain",
-    backgroundColor: "#ffffff",
-  },
+  newArchEnabled,
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.example.testprintapp",
@@ -46,6 +46,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-font",
     "expo-router",
+    "expo-web-browser",
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/images/splash-icon.png",
+        imageWidth: 200,
+        resizeMode: "contain",
+        backgroundColor: "#ffffff",
+      },
+    ],
     [
       "expo-sqlite",
       {
@@ -63,7 +73,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     "react-native-epson-escposprinter",
   ],
-  newArchEnabled,
   experiments: {
     turboModules: newArchEnabled,
     typedRoutes: true,
