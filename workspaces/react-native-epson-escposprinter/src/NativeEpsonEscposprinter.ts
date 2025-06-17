@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-types */
-
 import { type TurboModule, TurboModuleRegistry } from "react-native";
 import type {
   PrinterFirmwareInformation,
