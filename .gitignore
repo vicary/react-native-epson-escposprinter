@@ -189,16 +189,6 @@ buck-out/
 # CocoaPods
 ios/Pods/
 
-# Expo
-workspaces/testprint-app/.expo/
-workspaces/testprint-app/dist/
-workspaces/testprint-app/ios/
-workspaces/testprint-app/android/
-workspaces/testprint-app/web-build/
-workspaces/testprint-app/expo-env.d.ts
-workspaces/*/android/build/
-workspaces/*/lib/
-
 # Native
 .kotlin/
 *.orig.*

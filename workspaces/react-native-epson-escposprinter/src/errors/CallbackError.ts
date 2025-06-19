@@ -54,8 +54,11 @@ export const enum CallbackCode {
   CODE_ERR_FAILURE = 255,
 }
 
-abstract class CallbackError extends Error {
-  constructor(public readonly status: CallbackCode, message: string) {
+export abstract class CallbackError extends Error {
+  constructor(
+    public readonly status: CallbackCode,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -148,8 +151,7 @@ export class CallbackBatteryLowError extends CallbackError {
 
 export class CallbackTooManyRequestsError extends CallbackError {
   constructor(
-    message =
-      "The number of print jobs sent to the printer has exceeded the allowable limit.",
+    message = "The number of print jobs sent to the printer has exceeded the allowable limit.",
   ) {
     super(CallbackCode.CODE_ERR_TOO_MANY_REQUESTS, message);
   }
@@ -157,8 +159,7 @@ export class CallbackTooManyRequestsError extends CallbackError {
 
 export class CallbackRequestEntityTooLargeError extends CallbackError {
   constructor(
-    message =
-      "The size of the print job data exceeds the capacity of the printer.",
+    message = "The size of the print job data exceeds the capacity of the printer.",
   ) {
     super(CallbackCode.CODE_ERR_REQUEST_ENTITY_TOO_LARGE, message);
   }
@@ -240,7 +241,10 @@ export class CallbackFailureError extends CallbackError {
 // CODE_ERR_FAILURE Error exists in the requested document syntax.
 // CODE_ERR_TIMEOUT Print timeout occurred.
 
-export const getCallbackError = (code: number, message?: string) => {
+export const getCallbackError = (
+  code: number,
+  message?: string,
+): CallbackError | null => {
   switch (code) {
     case CallbackCode.CODE_ERR_TIMEOUT:
       return new CallbackTimeoutError(message);
@@ -295,6 +299,6 @@ export const getCallbackError = (code: number, message?: string) => {
     case CallbackCode.CODE_ERR_FAILURE:
       return new CallbackFailureError(message);
     default:
-      return message ? new Error(message) : null;
+      return message ? new CallbackFailureError(message) : null;
   }
 };

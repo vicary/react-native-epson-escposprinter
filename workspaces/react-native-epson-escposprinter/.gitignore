@@ -1,7 +1,6 @@
-# Expo
-.expo/
 dist/
-ios/
-android/
+lib/
+android/build/
 web-build/
 expo-env.d.ts
+

@@ -1,9 +1,9 @@
 import EventEmitter from "eventemitter3";
 import {
-  type CallbackCode,
   ErrorCode,
   getEpsonError,
   PrinterIllegalError,
+  type CallbackCode,
 } from "./errors";
 import { events, NativeInterface } from "./NativeInterface";
 import type {
