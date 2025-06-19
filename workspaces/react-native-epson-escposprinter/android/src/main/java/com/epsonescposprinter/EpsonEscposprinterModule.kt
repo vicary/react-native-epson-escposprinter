@@ -5,41 +5,15 @@ import android.util.Base64
 import android.widget.Toast
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import com.epson.epos2.discovery.DeviceInfo;
-import com.epson.epos2.discovery.Discovery;
-import com.epson.epos2.discovery.DiscoveryListener;
-import com.epson.epos2.discovery.FilterOption;
+import com.epson.epos2.discovery.*;
 import com.epson.epos2.Epos2CallbackCode
 import com.epson.epos2.Epos2Exception
-import com.epson.epos2.printer.FirmwareInfo
-import com.epson.epos2.printer.FirmwareUpdateListener
-import com.epson.epos2.printer.GetPrinterSettingExListener
-import com.epson.epos2.printer.MaintenanceCounterListener
-import com.epson.epos2.printer.Printer
-import com.epson.epos2.printer.PrinterInformationListener
-import com.epson.epos2.printer.PrinterSettingListener
-import com.epson.epos2.printer.PrinterStatusInfo
-import com.epson.epos2.printer.ReceiveListener
-import com.epson.epos2.printer.SetPrinterSettingExListener
-import com.epson.epos2.printer.StatusChangeListener
-import com.epson.epos2.printer.VerifyPasswordListener
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.Promise
-import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.ReadableMap
-import com.facebook.react.bridge.WritableArray
-import com.facebook.react.bridge.WritableMap
+import com.epson.epos2.printer.*
+import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
-import java.util.WeakHashMap
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -159,20 +133,10 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
 
   override fun getName(): String = NAME
 
-  protected val coroutineScope = CoroutineScope(Dispatchers.IO)
+  protected val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
   private val instances = ConcurrentHashMap<Int, Printer>()
   private val instancesId = AtomicInteger(0)
-  protected fun getInstance(id: Double, promise: Promise): Printer? =
-    instances.get(id.toInt())
-      ?: run {
-        promise.reject(
-          CODE_ERROR,
-          Epos2Exception.ERR_NOT_FOUND.toString()
-        )
-        null
-      }
-
   protected suspend fun runCatchingForInstance(
     id: Double,
     promise: Promise,
@@ -187,11 +151,11 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
     }
   }
 
-  private val mutexes = WeakHashMap<Printer, Mutex>()
+  private val mutexes = ConcurrentHashMap<Printer, Mutex>()
   protected suspend fun withInstanceLock(
     printer: Printer,
     block: suspend Printer.() -> Unit
-  ) = mutexes.getOrPut(printer) { Mutex() }.withLock { printer.block() }
+  ) = mutexes.computeIfAbsent(printer) { Mutex() }.withLock { printer.block() }
 
   private fun emitEvent(event: String, parameters: WritableMap) {
     context
@@ -333,6 +297,7 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         }
         .onSuccess {
           instances.remove(id.toInt())
+          mutexes.remove(it)
           promise.resolve(null)
         }
     }
