@@ -440,6 +440,20 @@ RCT_EXTERN_METHOD(discoveryStop
                   :         (RCTPromiseResolveBlock) resolve
                   rejecter: (RCTPromiseRejectBlock)  reject)
 
+RCT_EXTERN_METHOD(setLogSettings
+                  :         (double)                 period
+                  to:       (double)                 output
+                  ip:       (NSString *)             ipAddress
+                  withPort: (double)                 port
+                  maxSize:  (double)                 size
+                  forLevel: (double)                 level
+                  resolver: (RCTPromiseResolveBlock) resolve
+                  rejecter: (RCTPromiseRejectBlock)  reject)
+
+RCT_EXTERN_METHOD(getSdkVersion
+                  :         (RCTPromiseResolveBlock) resolve
+                  rejecter: (RCTPromiseRejectBlock)  reject)
+
 // Don't compile this code when we build for the old architecture.
 #ifdef RCT_NEW_ARCH_ENABLED
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {

@@ -42,6 +42,21 @@ for await (const info of discoverPrinters()) {
 }
 ```
 
+### Enable SDK Logs
+
+```tsx
+import { Log, LogPeriod } from "react-native-epson-escposprinter";
+
+// Store SDK logs locally, you must include relevant file system capabilities.
+await Log.enableLocal(LogPeriod.PERIOD_PERMANENT);
+
+// Send SDK logs to a network endpoint, you must include network capabilities.
+await Log.enableNetwork("1.2.3.4", 5678);
+
+// Stop recording SDK logs
+await Log.disable();
+```
+
 ## Building the example app
 
 1. `yarn install`

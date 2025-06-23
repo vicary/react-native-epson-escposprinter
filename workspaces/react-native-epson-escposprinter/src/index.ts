@@ -1,4 +1,5 @@
 export * from "./Discovery";
+export * from "./Log";
 export * from "./Printer";
 export * from "./PrinterConst";
 

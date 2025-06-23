@@ -11,6 +11,7 @@ import com.epson.epos2.discovery.DiscoveryListener;
 import com.epson.epos2.discovery.FilterOption;
 import com.epson.epos2.Epos2CallbackCode
 import com.epson.epos2.Epos2Exception
+import com.epson.epos2.Log
 import com.epson.epos2.printer.FirmwareInfo
 import com.epson.epos2.printer.FirmwareUpdateListener
 import com.epson.epos2.printer.GetPrinterSettingExListener
@@ -2008,5 +2009,53 @@ class EpsonEscposprinterModule internal constructor(val context: ReactApplicatio
         )
       }
       .onSuccess { promise.resolve(null) }
+  }
+
+  @ReactMethod
+  override fun setLogSettings(
+    period: Double,
+    output: Double,
+    ipAddress: String,
+    port: Double,
+    logSize: Double,
+    logLevel: Double,
+    promise: Promise
+  ) {
+    runCatching {
+      Log.setLogSettings(
+        context,
+        period.toInt(),
+        output.toInt(),
+        ipAddress.takeIf { it.isNotEmpty() },
+        port.toInt(),
+        logSize.toInt(),
+        logLevel.toInt()
+      )
+    }
+      .onFailure {
+        promise.reject(
+          CODE_ERROR,
+          if (it is Epos2Exception)
+            it.getErrorStatus().toString()
+          else
+            it.message
+        )
+      }
+      .onSuccess { promise.resolve(null) }
+  }
+
+  @ReactMethod
+  override fun getSdkVersion(promise: Promise) {
+    runCatching { Log.getSdkVersion() }
+      .onFailure {
+        promise.reject(
+          CODE_ERROR,
+          if (it is Epos2Exception)
+            it.getErrorStatus().toString()
+          else
+            it.message
+        )
+      }
+      .onSuccess { promise.resolve(it) }
   }
 }

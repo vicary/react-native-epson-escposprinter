@@ -7,7 +7,7 @@ import com.facebook.react.bridge.ReadableMap
 
 abstract class EpsonEscposprinterSpec internal constructor(context: ReactApplicationContext) :
     ReactContextBaseJavaModule(context) {
-
+  // Printer
   abstract fun addListener(eventName: String)
   abstract fun removeListeners(count: Double)
   abstract fun connect(printerSeries: Double, lang: Double, target: String, timeout: Double, promise: Promise)
@@ -71,4 +71,7 @@ abstract class EpsonEscposprinterSpec internal constructor(context: ReactApplica
   abstract fun forceReset(id: Double, timeout: Double, promise: Promise)
   abstract fun discoveryStart(filter: ReadableMap, promise: Promise)
   abstract fun discoveryStop(promise: Promise)
+  // Log
+  abstract fun setLogSettings(period: Double, output: Double, ipAddress: String, port: Double, logSize: Double, logLevel: Double, promise: Promise)
+  abstract fun getSdkVersion(promise: Promise)
 }

@@ -1989,6 +1989,52 @@ class EpsonEscposprinter: RCTEventEmitter,
       resolve(nil)
     }
   }
+
+  @objc
+  func setLogSettings(
+    _ period: NSNumber,
+    to output: NSNumber,
+    ip ipAddress: NSString?,
+    withPort port: NSNumber,
+    maxSize size: NSNumber,
+    forLevel level: NSNumber,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    queue.async(flags: .barrier) {
+      var ip = ipAddress as String?
+      if ip?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? false {
+        ip = nil
+      }
+
+      let result = Epos2Log.setLogSettings(
+        period.int32Value,
+        output: output.int32Value,
+        ipAddress: ip,
+        port: port.int32Value,
+        logSize: size.int32Value,
+        logLevel: level.int32Value
+      )
+      guard result == EPOS2_SUCCESS.rawValue else {
+        reject(CODE_ERROR, String(result), nil)
+        return
+      }
+
+      resolve(nil)
+    }
+  }
+
+  @objc
+  func getSdkVersion(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    queue.async(flags: .barrier) {
+      let result = Epos2Log.getSdkVersion()
+
+      resolve(result)
+    }
+  }
 }
 
 class EpsonPrinterDelegate: NSObject,
