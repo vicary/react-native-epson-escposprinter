@@ -7,6 +7,8 @@ import type {
 } from "./PrinterConst";
 
 export interface Spec extends TurboModule {
+  // Printer
+
   addListener(eventType: string): void;
 
   removeListeners(count: number): void;
@@ -248,6 +250,19 @@ export interface Spec extends TurboModule {
   discoveryStart(filter: Object): Promise<void>;
 
   discoveryStop(): Promise<void>;
+
+  // Log
+
+  setLogSettings(
+    period: number,
+    output: number,
+    ipAddress: string,
+    port: number,
+    logSize: number,
+    logLevel: number,
+  ): Promise<void>;
+
+  getSdkVersion(): Promise<string>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>("EpsonEscposprinter");

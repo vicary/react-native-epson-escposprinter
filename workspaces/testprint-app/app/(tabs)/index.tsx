@@ -4,17 +4,20 @@ import { useTestPrint } from "@/hooks/useTestPrint";
 import React, { FunctionComponent, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Button,
   Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import {
   DeviceInfo,
   discoverPrinters,
   FilterDeviceType,
+  Log,
 } from "react-native-epson-escposprinter";
 
 const Home: FunctionComponent = () => {
@@ -90,9 +93,75 @@ const Home: FunctionComponent = () => {
               <PrinterCard key={printer.target} device={printer} />
             ))}
           </View>
+
+          <LogSection />
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+};
+
+const LogSection: FunctionComponent = () => {
+  const [loading, setLoading] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [ip, setIp] = useState("192.168.68.53");
+  const [port, setPort] = useState(8080);
+
+  return (
+    <View className="flex-co flex flex-wrap gap-3">
+      <Text className="text-xl">Log</Text>
+
+      <Text className="text-xs text-gray-400">IP Address</Text>
+      <TextInput
+        value={ip}
+        onChangeText={setIp}
+        className="w-full rounded-md border border-gray-300 bg-white p-2"
+      />
+
+      <Text className="text-xs text-gray-400">Port</Text>
+      <TextInput
+        value={String(port)}
+        onChangeText={(text) => setPort(Number(text))}
+        keyboardType="numeric"
+        className="w-full rounded-md border border-gray-300 bg-white p-2"
+      />
+
+      <Button
+        title="Enable Logs"
+        disabled={loading || enabled}
+        onPress={async () => {
+          if (loading) return;
+
+          try {
+            setLoading(true);
+            await Log.enableNetwork(ip, port);
+            setEnabled(true);
+          } catch (e) {
+            console.error(`Error enabling logs:`, e);
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+
+      <Button
+        title="Disable Logs"
+        disabled={loading || !enabled}
+        onPress={async () => {
+          if (loading) return;
+
+          try {
+            setLoading(true);
+            await Log.disable();
+            setEnabled(false);
+          } catch (e) {
+            console.error(`Error disabling logs:`, e);
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+    </View>
   );
 };
 
