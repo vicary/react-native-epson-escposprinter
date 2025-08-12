@@ -164,11 +164,12 @@ project.xcworkspace
 .gradle
 local.properties
 *.iml
+*.hprof
 **/android/.settings/
 
 # BUCK
 buck-out/
-\.buckd/
+.buckd/
 *.keystore
 !debug.keystore
 
@@ -202,7 +203,8 @@ ios/Pods/
 .metro-health-check*
 
 # DotEnv
-.env*.local
+.env
+.env.local
 
 # Local Netlify folder
 .netlify/
